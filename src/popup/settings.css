@@ -1,0 +1,371 @@
+body {
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    background-color: #f8f9fa;
+    width: 350px;
+    min-height: 400px;
+}
+
+.settings-container {
+    padding: 0;
+}
+
+.header {
+    background: white;
+    border-bottom: 1px solid #e9ecef;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.back-button {
+    background: none;
+    border: none;
+    color: #007bff;
+    cursor: pointer;
+    font-size: 14px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.1s ease;
+}
+
+.back-button:hover {
+    background-color: #f8f9ff;
+}
+
+h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    flex: 1;
+}
+
+.section {
+    background: white;
+    margin: 12px;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+    padding: 16px;
+}
+
+h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+}
+
+.section-description {
+    margin: 0 0 16px 0;
+    font-size: 12px;
+    color: #666;
+    line-height: 1.4;
+}
+
+.service-toggles {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.service-toggle {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    transition: background-color 0.1s ease;
+}
+
+.service-toggle:hover {
+    background-color: #f8f9fa;
+}
+
+.service-toggle input[type="checkbox"] {
+    display: none;
+}
+
+.toggle-slider {
+    width: 40px;
+    height: 20px;
+    background-color: #ccc;
+    border-radius: 10px;
+    position: relative;
+    transition: background-color 0.2s ease;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: white;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.2s ease;
+}
+
+.service-toggle input[type="checkbox"]:checked + .toggle-slider {
+    background-color: #007bff;
+}
+
+.service-toggle input[type="checkbox"]:checked + .toggle-slider::before {
+    transform: translateX(20px);
+}
+
+.service-info {
+    flex: 1;
+}
+
+.service-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.service-url {
+    font-size: 11px;
+    color: #666;
+}
+
+.companion-select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 14px;
+    background-color: white;
+    cursor: pointer;
+}
+
+.companion-select:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+}
+
+/* Service Configuration Styles */
+.service-config-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.config-tab {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 12px;
+    color: #666;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+.config-tab:hover {
+    color: #333;
+    background-color: #f8f9fa;
+}
+
+.config-tab.active {
+    color: #007bff;
+    border-bottom-color: #007bff;
+}
+
+.service-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.config-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.config-field-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #333;
+}
+
+.config-field-description {
+    font-size: 11px;
+    color: #666;
+    margin-bottom: 4px;
+}
+
+.config-input {
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    background-color: #fafafa;
+    min-height: 60px;
+    resize: vertical;
+}
+
+.config-input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.15);
+    background-color: white;
+}
+
+.config-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.config-checkbox input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+}
+
+.config-checkbox label {
+    font-size: 12px;
+    color: #333;
+    cursor: pointer;
+}
+
+.config-actions {
+    display: flex;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid #e9ecef;
+}
+
+.config-actions button {
+    padding: 6px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.reset-btn {
+    background-color: #fff5f5;
+    border-color: #dc3545;
+    color: #dc3545;
+}
+
+.reset-btn:hover {
+    background-color: #dc3545;
+    color: white;
+}
+
+.export-btn, .import-btn {
+    background-color: #f8f9fa;
+    color: #333;
+}
+
+.export-btn:hover, .import-btn:hover {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: white;
+}
+
+/* Custom Service Form Styles */
+.custom-service-form {
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    padding: 16px;
+    margin-bottom: 16px;
+    background-color: #f8f9fa;
+}
+
+.custom-service-controls {
+    text-align: center;
+}
+
+.add-service-btn {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.add-service-btn:hover {
+    background-color: #218838;
+}
+
+.new-service-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #dee2e6;
+}
+
+.save-new-btn {
+    background-color: #28a745;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.save-new-btn:hover {
+    background-color: #218838;
+}
+
+.cancel-btn {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.cancel-btn:hover {
+    background-color: #5a6268;
+}
+
+.config-tab.custom-service {
+    position: relative;
+}
+
+.config-tab .delete-service-btn {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    font-size: 10px;
+    cursor: pointer;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.config-tab.custom-service:hover .delete-service-btn {
+    display: flex;
+}

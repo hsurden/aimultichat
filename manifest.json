@@ -1,0 +1,76 @@
+{
+  "manifest_version": 3,
+  "name": "AI Multi-Broadcast",
+  "description": "Broadcast a single prompt to multiple AI service tabs (ChatGPT, Claude, Gemini).",
+  "version": "0.1.0",
+  "icons": {
+    "16": "src/assets/icon16.png",
+    "48": "src/assets/icon48.png",
+    "128": "src/assets/icon128.png"
+  },
+  "permissions": [
+    "tabs",
+    "scripting",
+    "storage",
+    "system.display",
+    "webNavigation",
+    "contextMenus"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "AI Multi-Broadcast",
+    "default_popup": "src/popup/mode-selection.html"
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [{
+    "matches": [
+      "https://chatgpt.com/*",
+      "https://chat.openai.com/*",
+      "https://claude.ai/*",
+      "https://gemini.google.com/*",
+      "https://perplexity.ai/*",
+      "https://*.deepseek.com/*",
+      "https://grok.com/*",
+      "https://grok.x.ai/*",
+      "https://chat.*/*",
+      "https://*.ai/*",
+      "https://poe.com/*",
+      "https://bard.google.com/*",
+      "https://copilot.microsoft.com/*",
+      "https://character.ai/*",
+      "https://you.com/*",
+      "https://phind.com/*",
+      "https://beta.character.ai/*"
+    ],
+    "js": [
+      "src/services-config-content.js",
+      "src/content/content.js"
+    ],
+    "run_at": "document_idle"
+  }, {
+    "matches": ["<all_urls>"],
+    "js": ["src/content/selection-listener.js"],
+    "run_at": "document_idle"
+  }],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/companion/companion.html",
+        "src/companion/companion.css",
+        "src/companion/companion.js"
+      ],
+      "matches": [ "<all_urls>" ]
+    }
+  ],
+  "commands": {
+    "broadcast-last-prompt": {
+    "suggested_key": { "default": "Alt+Shift+Y" },
+    "description": "Broadcast the last prompt again"
+    }
+  }
+}

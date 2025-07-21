@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Companion Controls</title>
+    <link rel="stylesheet" href="companion.css">
+</head>
+<body>
+    <div id="control-bar">
+        <div id="main-controls">
+            <select id="service-dropdown" title="Switch AI Service">
+                <option value="chatgpt">ChatGPT</option>
+                <option value="claude">Claude</option>
+                <option value="gemini">Gemini</option>
+            </select>
+            <label class="toggle-switch">
+                <input type="checkbox" id="copy-context-checkbox" checked>
+                <span class="slider"></span>
+            </label>
+            <label for="copy-context-checkbox" class="control-label">Copy Page Context</label>
+        </div>
+        <button id="toggle-button" title="Toggle extra options">›</button>
+    </div>
+    <div id="options-container" class="collapsed">
+        <!-- More options can be added here in the future -->
+        <p>More settings will appear here.</p>
+    </div>
+    <script src="companion.js"></script>
+</body>
+</html>

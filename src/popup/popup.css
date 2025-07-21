@@ -1,0 +1,358 @@
+/* popup.css */
+
+/* Base layout and typography */
+body {
+  font: 13px/1.4 system-ui, sans-serif;
+  margin: 8px;
+  min-width: 380px;
+}
+h1 {
+  font-size: 16px;
+  margin: 0 0 6px 0;
+}
+
+/* Services section */
+.services-section {
+  margin-bottom: 16px;
+  font-size: 10px;
+}
+.services-header {
+  font-size: 10px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+/* Legacy checkbox grid (unused when using Choices.js) */
+#services {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+/* Legacy service-toggle cards */
+.service-toggle {
+  background: white;
+  border: 2px solid #e9ecef;
+  padding: 12px 8px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+.service-toggle:hover {
+  border-color: #007bff;
+  background-color: #f8f9ff;
+  transform: translateY(-1px);
+}
+.service-toggle.checked {
+  border-color: #007bff;
+  background-color: #e7f3ff;
+}
+.service-toggle input[type="checkbox"] {
+  display: none;
+}
+
+/* Service name and status in table */
+.service-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #333;
+  margin: 0;
+}
+.service-status {
+  font-size: 10px;
+  color: #666;
+}
+
+/* Options toggles */
+.option-toggle {
+  background: #f2f2f2;
+  padding: 4px 6px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+/* Prompt textarea */
+textarea {
+  width: 100%;
+  resize: vertical;
+  font: 13px monospace;
+  padding: 6px;
+  box-sizing: border-box;
+  margin-bottom: 8px;
+}
+
+/* Button bars */
+.buttons {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.options-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+button {
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* Status expando */
+details {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+summary {
+  padding: 6px 10px;
+  background-color: #f2f2f2;
+  cursor: pointer;
+  list-style: none;
+}
+summary::-webkit-details-marker {
+  display: none;
+}
+summary:before {
+  content: '► ';
+  font-size: 10px;
+}
+details[open] > summary:before {
+  content: '▼ ';
+}
+
+/* Status table */
+#statusTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  margin-top: 4px;
+}
+#statusTable th,
+#statusTable td {
+  border: 1px solid #ccc;
+  padding: 4px 6px;
+  text-align: left;
+  border-left: none;
+  border-right: none;
+}
+#statusTable th {
+  border-top: 1px solid #ccc;
+}
+#statusTable tr:last-child td {
+  border-bottom: none;
+}
+
+/* Status pills */
+.status-pill {
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  background: #ddd;
+}
+.status-sent {
+  background: #c2f2c2;
+}
+.status-error {
+  background: #f8c2c2;
+}
+.note {
+  font-size: 10px;
+  color: #555;
+  margin-top: 8px;
+}
+
+/* Tiling dropdown */
+.tiling-select {
+  flex-grow: 1;
+  padding: 4px;
+  font-size: 12px;
+  background-color: #f2f2f2;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+.tiling-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Hide legacy bottom panel by default */
+.bottom-service-panel {
+  display: none;
+}
+
+/* Bottom-mode layout */
+body.bottom-mode {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  padding: 8px;
+  height: 100vh;
+  box-sizing: border-box;
+  background-color: #f8f9fa;
+}
+body.bottom-mode .bottom-service-panel {
+  display: flex;
+}
+
+/* Hide unneeded elements in bottom-mode */
+body.bottom-mode h1,
+body.bottom-mode .buttons,
+body.bottom-mode .options-bar,
+body.bottom-mode #statusTable,
+body.bottom-mode .note {
+  display: none;
+}
+
+/* Bottom-mode prompt */
+body.bottom-mode #prompt {
+  flex: 3;
+  resize: none;
+  font-size: 14px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin: 0;
+}
+
+/* Bottom-mode service panel */
+body.bottom-mode .bottom-service-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: white;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+body.bottom-mode .bottom-service-panel h3 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+body.bottom-mode .bottom-services {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+body.bottom-mode .bottom-service-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+body.bottom-mode .bottom-service-item:hover {
+  background: #e9ecef;
+  border-color: #007bff;
+}
+body.bottom-mode .bottom-service-item.checked {
+  background: #e7f3ff;
+  border-color: #007bff;
+}
+body.bottom-mode .bottom-service-item input[type="checkbox"] {
+  margin: 0;
+}
+body.bottom-mode .bottom-service-item .service-name {
+  font-size: 12px;
+  font-weight: 500;
+  flex: 1;
+}
+
+/* Bottom-mode action buttons */
+body.bottom-mode .bottom-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: auto;
+}
+body.bottom-mode .bottom-actions button {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+body.bottom-mode .bottom-actions button:hover {
+  background: #f8f9fa;
+  border-color: #007bff;
+}
+body.bottom-mode .bottom-actions .primary-button {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+body.bottom-mode .bottom-actions .primary-button:hover {
+  background-color: #0056b3;
+  border-color: #0056b3;
+}
+
+/* --- Compact Choices.js Overrides --- */
+
+/* Shrink the main container */
+.choices__inner {
+  font-size: 10px !important;
+  padding: 2px 4px !important;
+  min-height: auto !important;
+  border-radius: 4px !important;
+}
+
+/* Make the pills much more compact */
+.choices__list--multiple .choices__item.choices__item--selectable {
+  padding: 2px 6px !important;
+  border-radius: 6px !important;
+  line-height: 1.2 !important;
+  margin: 2px !important;
+  font-size: 10px !important;
+}
+
+/* Shrink the “×” remove button */
+.choices__list--multiple .choices__item .choices__button {
+  width: 10px !important;
+  height: 10px !important;
+  margin-left: 2px !important;
+  padding: 0 !important;
+}
+
+/* Tighter dropdown items */
+.choices__list--dropdown .choices__item {
+  padding: 4px 6px !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}
+
+/* Override the cloned search input */
+.choices__input--cloned {
+  width: auto !important;
+  min-width: 8ch !important;
+  padding: 2px !important;
+  font-size: 10px !important;
+  line-height: 1.2 !important;
+}

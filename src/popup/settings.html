@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Multi-Broadcast - Settings</title>
+    <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+    <div class="settings-container">
+        <div class="header">
+            <button id="back-button" class="back-button">← Back</button>
+            <h3>Settings</h3>
+        </div>
+        
+        <div class="section">
+            <h4>Default AI Services</h4>
+            <p class="section-description">Choose which AI services to use by default in Multi-Mode and Tiled modes:</p>
+            
+            <div class="service-toggles">
+                <label class="service-toggle">
+                    <input type="checkbox" id="chatgpt-toggle" value="chatgpt">
+                    <span class="toggle-slider"></span>
+                    <div class="service-info">
+                        <div class="service-name">ChatGPT</div>
+                        <div class="service-url">chatgpt.com</div>
+                    </div>
+                </label>
+                
+                <label class="service-toggle">
+                    <input type="checkbox" id="claude-toggle" value="claude">
+                    <span class="toggle-slider"></span>
+                    <div class="service-info">
+                        <div class="service-name">Claude</div>
+                        <div class="service-url">claude.ai</div>
+                    </div>
+                </label>
+                
+                <label class="service-toggle">
+                    <input type="checkbox" id="gemini-toggle" value="gemini">
+                    <span class="toggle-slider"></span>
+                    <div class="service-info">
+                        <div class="service-name">Gemini</div>
+                        <div class="service-url">gemini.google.com</div>
+                    </div>
+                </label>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h4>Default Companion Service</h4>
+            <p class="section-description">Choose which AI service to use for Companion Mode:</p>
+            
+            <select id="companion-service-select" class="companion-select">
+                <option value="chatgpt">ChatGPT</option>
+                <option value="claude">Claude</option>
+                <option value="gemini">Gemini</option>
+            </select>
+        </div>
+        
+        <div class="section">
+            <h4>Custom Services</h4>
+            <p class="section-description">Add new AI services like Perplexity, Deepseek, or Grok.</p>
+            
+            <div class="custom-service-form" id="new-service-form" style="display: none;">
+                <div class="config-field">
+                    <div class="config-field-label">Service Key</div>
+                    <div class="config-field-description">Unique identifier (lowercase, no spaces, e.g., "perplexity")</div>
+                    <input type="text" class="config-input" id="new-service-key" placeholder="perplexity" style="min-height: auto;">
+                </div>
+                
+                <div class="config-field">
+                    <div class="config-field-label">Service Name</div>
+                    <div class="config-field-description">Display name for the service</div>
+                    <input type="text" class="config-input" id="new-service-label" placeholder="Perplexity" style="min-height: auto;">
+                </div>
+                
+                <div class="config-field">
+                    <div class="config-field-label">URL Pattern (RegExp)</div>
+                    <div class="config-field-description">Regular expression to match service URLs</div>
+                    <input type="text" class="config-input" id="new-service-match" placeholder="perplexity\\.ai$" style="min-height: auto;">
+                </div>
+                
+                <div class="new-service-actions">
+                    <button id="save-new-service-btn" class="save-new-btn">Add Service</button>
+                    <button id="cancel-new-service-btn" class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+            
+            <div class="custom-service-controls">
+                <button id="add-new-service-btn" class="add-service-btn">+ Add New Service</button>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h4>Service Configuration</h4>
+            <p class="section-description">Modify service attributes like selectors and settings. Changes are saved automatically.</p>
+            
+            <div class="service-config-tabs" id="service-tabs">
+                <button class="config-tab active" data-service="chatgpt">ChatGPT</button>
+                <button class="config-tab" data-service="claude">Claude</button>
+                <button class="config-tab" data-service="gemini">Gemini</button>
+            </div>
+            
+            <div class="service-config-content">
+                <div id="service-editor" class="service-editor">
+                    <!-- Service configuration will be populated here -->
+                </div>
+                
+                <div class="config-actions">
+                    <button id="reset-service-btn" class="reset-btn">Reset to Default</button>
+                    <button id="export-config-btn" class="export-btn">Export Config</button>
+                    <button id="import-config-btn" class="import-btn">Import Config</button>
+                </div>
+                <input type="file" id="config-file-input" accept=".json" style="display: none;">
+            </div>
+        </div>
+    </div>
+    
+    <script type="module" src="settings.js"></script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    background-color: #f0f2f5;
+    overflow: hidden; /* Prevent scrollbars in the tiny window */
+    height: 100vh;
+}
+
+#control-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    background-color: #e9ecef;
+    border-bottom: 1px solid #dee2e6;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+#main-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#service-dropdown {
+    font-size: 11px;
+    padding: 2px 4px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: white;
+    cursor: pointer;
+    min-width: 70px;
+    height: 20px;
+}
+
+.control-label {
+    cursor: pointer;
+    user-select: none;
+}
+
+#toggle-button {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    font-size: 14px;
+    line-height: 1;
+    transition: transform 0.2s;
+}
+
+#options-container {
+    padding: 8px;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+    max-height: 0;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    position: absolute;
+    top: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#options-container:not(.collapsed) {
+    max-height: 200px;
+    padding: 8px;
+}
+
+#toggle-button:not(.collapsed) {
+    transform: rotate(90deg);
+}
+
+/* Toggle Switch CSS */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    transition: .4s;
+    border-radius: 20px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .slider {
+    background-color: #2196F3;
+}
+
+input:checked + .slider:before {
+    transform: translateX(14px);
+}
