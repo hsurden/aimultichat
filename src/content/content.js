@@ -188,6 +188,24 @@ function insertPrompt(inputEl, text) {
 
 // Attempt to send (Enter or button)
 function performSend(inputEl) {
+  // Special handling for Gemini - use enhanced Enter key events
+  if (serviceName === 'gemini') {
+    // Use multiple Enter event approaches for Gemini for better compatibility
+    const enterEvents = [
+      new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }),
+      new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }),
+      new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true })
+    ];
+    
+    enterEvents.forEach(event => {
+      inputEl.dispatchEvent(event);
+      document.dispatchEvent(event);
+    });
+    
+    return true;
+  }
+  
+  // Standard behavior for other services
   if (cfg.useEnter) {
     const kd = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
     inputEl.dispatchEvent(kd);
@@ -245,13 +263,19 @@ function waitForInput(maxMs = 5000, interval = 100) {
 async function injectAndSend(text) {
   const inputEl = await waitForInput();
   insertPrompt(inputEl, text);
-  // Slight delay to allow frameworks (React/Vue) to process
-  await new Promise(r => setTimeout(r, 50));
+  // Longer delay for Gemini to allow UI to stabilize
+  if (serviceName === 'gemini') {
+    await new Promise(r => setTimeout(r, 300));
+  } else {
+    // Slight delay to allow frameworks (React/Vue) to process
+    await new Promise(r => setTimeout(r, 50));
+  }
   performSend(inputEl);
 }
 
 // Global variable to track companion mode
 let isCompanionMode = false;
+
 
 // Function to get current text from input element
 function getInputText(inputEl) {

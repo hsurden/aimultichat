@@ -45,9 +45,11 @@ const DEFAULT_SERVICES = {
       'textarea'
     ],
     sendButtonSelectors: [
-      'button[aria-label*="Send message"]',
-      'button[aria-label*="Send"]',
-      'button.send-button'
+      'button.send-button[aria-label="Send message"]:not(.stop)',
+      'button.send-button.submit',
+      'button[aria-label="Send message"]:not(.stop)',
+      '.send-button-container button.submit',
+      'button[aria-label="Send message"]'
     ],
     useEnter: true,
     preFocus: true
