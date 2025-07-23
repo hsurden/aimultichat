@@ -19,172 +19,170 @@ let companionState = {
     cachedPageUrl: null // Track which page the cached content is from
 };
 
-// Helper function to detect footer-like elements
-function isLikelyFooter(element) {
-    const tagName = element.tagName.toLowerCase();
-    const className = element.className ? element.className.toLowerCase() : '';
-    const id = element.id ? element.id.toLowerCase() : '';
-    
-    // Direct footer tag
-    if (tagName === 'footer') {
-        return true;
-    }
-    
-    // Common footer class/id patterns
-    if (className.includes('footer') || 
-        className.includes('site-footer') ||
-        className.includes('page-footer') ||
-        className.includes('bottom') ||
-        className.includes('copyright') ||
-        id.includes('footer') ||
-        id.includes('copyright')) {
-        return true;
-    }
-    
-    // Check if element is positioned at the bottom of the page
-    const rect = element.getBoundingClientRect();
-    const windowHeight = window.innerHeight;
-    const documentHeight = document.documentElement.scrollHeight;
-    
-    // If element is in the bottom 15% of the page and contains typical footer content
-    if (rect.top > windowHeight * 0.85 || 
-        (rect.bottom > documentHeight * 0.85 && rect.bottom <= documentHeight)) {
+
+// This function will be injected into the target page to extract text.
+function getRenderedTextFromDocument() {
+
+    // Helper function to detect header-like text patterns
+    function isLikelyHeaderText(textChunk, position = 'unknown') {
+        const textLower = textChunk.toLowerCase();
         
-        const text = element.textContent || '';
-        const textLower = text.toLowerCase();
+        // Clear header indicators
+        if (textLower.includes('skip to') ||
+            textLower.includes('skip navigation') ||
+            textLower.includes('subscription') ||
+            textLower.includes('subscribe') ||
+            textLower.includes('login') ||
+            textLower.includes('log out') ||
+            textLower.includes('profile') ||
+            textLower.includes('customer service') ||
+            textLower.includes('main menu')) {
+            return true;
+        }
         
-        // Check for common footer text patterns
+        // NYTimes specific patterns
+        if (textLower.includes('u.s.international') ||
+            textLower.includes('give the times') ||
+            textLower.match(/skip to content.*search/i)) {
+            return true;
+        }
+        
+        // If it's at the beginning and has lots of navigation words (more restrictive)
+        if (position === 'beginning') {
+            const navWords = ['home', 'news', 'sports', 'business', 'politics', 'world', 'opinion', 'search', 'subscribe', 'login', 'account'];
+            const foundNavWords = navWords.filter(word => textLower.includes(word)).length;
+            // Require more navigation words and shorter text to be considered header
+            if (foundNavWords >= 6 && textChunk.length < 200) {
+                return true;
+            }
+        }
+        
+        return false;
+    }
+
+    // Helper function to detect footer-like text patterns  
+    function isLikelyFooterText(textChunk, position = 'unknown') {
+        const textLower = textChunk.toLowerCase();
+
+        console.log('[AIMultiChat] Checking footer text:', "position ", position, "text: ", textLower.substring(0, 100));
+        
+        // Clear footer indicators
         if (textLower.includes('copyright') ||
+            textLower.includes('contact us') ||
+            textLower.includes('cookie') ||
             textLower.includes('©') ||
             textLower.includes('terms of service') ||
             textLower.includes('privacy policy') ||
             textLower.includes('all rights reserved') ||
-            textLower.includes('contact us') ||
-            textLower.includes('about us') ||
-            textLower.match(/\d{4}.*all rights/) ||
-            textLower.match(/©.*\d{4}/)) {
+            textLower.match(/©.*\d{4}/) ||
+            textLower.match(/\d{4}.*all rights/)) {
             return true;
         }
         
-        // If element contains mostly links and is at bottom, likely footer
-        const links = element.querySelectorAll('a');
-        const textLength = text.replace(/\s+/g, ' ').trim().length;
-        if (links.length >= 3 && textLength < 500) {
-            return true;
+        // If it's at the end and has lots of footer-like links (more restrictive)
+        if (position === 'end') {
+            const footerWords = ['contact', 'about', 'careers', 'terms', 'privacy', 'help', 'support', 'legal'];
+            const foundFooterWords = footerWords.filter(word => textLower.includes(word)).length;
+            // Require more footer words and shorter text to be considered footer
+            if (foundFooterWords >= 4 && textChunk.length < 400) {
+                return true;
+            }
         }
+        
+        return false;
     }
-    
-    return false;
-}
 
-// This function will be injected into the target page to extract text.
-function getRenderedTextFromDocument() {
     // First try to get basic text content to ensure we get something
-    let fallbackText = document.body ? document.body.innerText || document.body.textContent || '' : '';
+    let text = document.body ? document.body.innerText || document.body.textContent || '' : '';
     
     try {
-        const bodyClone = document.body.cloneNode(true);
-
-        const elementsToRemove = [];
-        const walk = document.createTreeWalker(bodyClone, NodeFilter.SHOW_ELEMENT, null, false);
-        let node;
-        while ((node = walk.nextNode())) {
-            const tagName = node.tagName.toLowerCase();
-            const className = node.className ? node.className.toLowerCase() : '';
-            const id = node.id ? node.id.toLowerCase() : '';
-
-            // Remove script, style, and other non-content elements
-            if (['script', 'style', 'noscript', 'meta', 'link', 'title'].includes(tagName)) {
-                elementsToRemove.push(node);
-                continue;
-            }
-
-            // Remove Google-specific elements that often contain JavaScript
-            if (className.includes('google') && (className.includes('script') || className.includes('init'))) {
-                elementsToRemove.push(node);
-                continue;
-            }
-
-            // Remove elements with data attributes that suggest JavaScript content
-            if (node.hasAttribute('data-jscontroller') || 
-                node.hasAttribute('data-ved') || 
-                node.hasAttribute('jsaction') ||
-                node.hasAttribute('data-async-context')) {
-                elementsToRemove.push(node);
-                continue;
-            }
-
-            // Check for aria-hidden attribute
-            if (node.hasAttribute('aria-hidden') && node.getAttribute('aria-hidden') === 'true') {
-                elementsToRemove.push(node);
-                continue;
-            }
-
-            // Remove elements with very specific navigation/utility roles
-            const role = node.getAttribute('role');
-            if (role && ['banner', 'contentinfo', 'navigation', 'complementary', 'search'].includes(role)) {
-                elementsToRemove.push(node);
-                continue;
-            }
-
-            // Remove common non-content class patterns
-            if (className.includes('toolbar') || 
-                className.includes('sidebar') || 
-                className.includes('advertisement') ||
-                className.includes('ads') ||
-                className.includes('cookie') ||
-                className.includes('popup')) {
-                elementsToRemove.push(node);
-                continue;
-            }
-
-            // Detect footer-like elements
-            if (isLikelyFooter(node)) {
-                elementsToRemove.push(node);
-                continue;
+        // Split text into paragraphs for gentler filtering
+        let lines = text.split('\n').filter(line => line.trim().length > 0);
+        
+        console.log('[AIMultiChat] Original lines:', lines.length);
+        
+        // Filter out header-like content at the beginning (more conservative)
+        let startIndex = 0;
+        let consecutiveHeaderLines = 0;
+        for (let i = 0; i < Math.min(lines.length, 15); i++) {  // Check first 15 lines max
+            if (isLikelyHeaderText(lines[i], 'beginning')) {
+                console.log('[AIMultiChat] Removing header line:', lines[i].substring(0, 100));
+                consecutiveHeaderLines++;
+                // Only remove if we haven't removed too many lines already
+                if (consecutiveHeaderLines <= 10) {
+                    startIndex = i + 1;
+                }
+            } else if (lines[i].length > 30) {
+                // Found substantial content, stop removing
+                console.log('[AIMultiChat] Found content line, stopping header removal:', lines[i].substring(0, 100));
+                break;
             }
         }
-
-        elementsToRemove.forEach(el => el.remove());
-
-        let text = bodyClone.innerText || bodyClone.textContent || '';
         
-        // Clean up the text more aggressively
+        // Safety check - don't remove more than 80% of content
+        if (startIndex > lines.length * 0.8) {
+            console.log('[AIMultiChat] Header filtering too aggressive, resetting startIndex from', startIndex, 'to 0');
+            startIndex = 0;
+        }
+        
+        // Filter out footer-like content at the end by deleting as detected
+        for (let i = lines.length - 1; i >= Math.max(0, lines.length - 25); i--) {  // Check last 25 lines max
+            if (isLikelyFooterText(lines[i], 'end')) {
+                console.log('[AIMultiChat] Removing footer line:', lines[i].substring(0, 100));
+                lines.splice(i, 1);  // Delete the footer line immediately
+            } else if (lines[i].length > 40) {
+                // Found substantial content, stop removing
+                console.log('[AIMultiChat] Found content line, stopping footer removal:', lines[i].substring(0, 100));
+                break;
+            }
+        }
+        
+        // Keep only the content after header
+        lines = lines.slice(startIndex);
+        text = lines.join('\n');
+        
+        console.log('[AIMultiChat] After line filtering:', lines.length, 'lines remaining');
+        
+        // Apply regex-based cleanup for remaining header/nav patterns
         text = text
-            // Remove JavaScript-like patterns
-            .replace(/window\.\w+\s*[&|=]/g, '')
-            .replace(/function\s*\([^)]*\)\s*\{[^}]*\}/g, '')
-            .replace(/\b\w+\.\w+\([^)]*\);?/g, '')
-            // Remove Google-specific initialization code
-            .replace(/window\.wiz_\w+\s*&&\s*window\.wiz_\w+\([^)]*\);?/g, '')
-            .replace(/window\.IJ_\w+\s*=\s*\[[^\]]*\];?/g, '')
-            .replace(/initAft\(\)/g, '')
-            .replace(/ccTick\([^)]*\)/g, '')
-            // Remove URL-like patterns that are often from JavaScript
-            .replace(/https?:\/\/[^\s]*/g, '')
-            // Remove data structures that look like JSON/arrays
-            .replace(/\[[^\]]*["'][^"']*["'][^\]]*\]/g, '')
-            // Clean up extra whitespace
+            .replace(/window\.\w+.*$/gm, '')
+            .replace(/function\s*\([^)]*\).*$/gm, '')
+            // Apply specific pattern filtering
+            .replace(/SKIP TO CONTENT\s*SKIP TO SITE INDEX\s*SEARCH\s*/gi, '')
+            .replace(/U\.S\.\s*INTERNATIONAL\s*CANADA\s*ESPAÑOL\s*中文\s*/gi, '')
+            .replace(/U\.S\.INTERNATIONAL\s*CANADA\s*ESPAÑOL\s*中文\s*/gi, '')
+            .replace(/GIVE THE TIMES\s*Account\s*/gi, '')
+            .replace(/(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*/gi, '')
+            .replace(/Today's Paper\s*/gi, '')
+            .replace(/(?:Nasdaq|S&P 500|Dow)\s*[+-]?\d+\.?\d*%?\s*/gi, '')
+            .replace(/U\.S\.\s*World\s*Business\s*Arts\s*Lifestyle\s*Opinion\s*Audio\s*Games\s*Cooking\s*Wirecutter\s*The Athletic\s*/gi, '')
+            .replace(/New York Times\s*-\s*(?:T|Top Stories)\s*/gi, '')
+            .replace(/The New York Times\s*/gi, '')
+            // Clean up whitespace
             .replace(/\n\s*\n/g, '\n\n')
             .replace(/\s{3,}/g, ' ')
             .trim();
-        
-        // If filtered text is too short or still contains obvious JavaScript, use fallback
-        if (text.length < 50 || text.includes('window.') || text.includes('function(')) {
-            console.log('[AIMultiChat] Using fallback text extraction due to JS contamination');
-            // Clean the fallback text too
-            fallbackText = fallbackText
-                .replace(/window\.\w+.*$/gm, '')
-                .replace(/function\s*\([^)]*\).*$/gm, '')
-                .replace(/\n\s*\n/g, '\n\n')
-                .trim();
-            return fallbackText;
-        }
-        
+
         return text;
     } catch (e) {
         console.log('[AIMultiChat] Error in content extraction, using fallback:', e.message);
-        return fallbackText.replace(/\n\s*\n/g, '\n\n').trim();
+        // Apply the same filtering to the final fallback
+        return text
+            .replace(/SKIP TO CONTENT\s*SKIP TO SITE INDEX\s*SEARCH\s*/gi, '')
+            .replace(/U\.S\.\s*INTERNATIONAL\s*CANADA\s*ESPAÑOL\s*中文\s*/gi, '')
+            .replace(/U\.S\.INTERNATIONAL\s*CANADA\s*ESPAÑOL\s*中文\s*/gi, '')
+            .replace(/GIVE THE TIMES\s*Account\s*/gi, '')
+            .replace(/(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+[A-Za-z]+\s+\d{1,2},?\s+\d{4}\s*/gi, '')
+            .replace(/Today's Paper\s*/gi, '')
+            .replace(/(?:Nasdaq|S&P 500|Dow)\s*[+-]?\d+\.?\d*%?\s*/gi, '')
+            .replace(/U\.S\.\s*World\s*Business\s*Arts\s*Lifestyle\s*Opinion\s*Audio\s*Games\s*Cooking\s*Wirecutter\s*The Athletic\s*/gi, '')
+            .replace(/New York Times\s*-\s*(?:T|Top Stories)\s*/gi, '')
+            .replace(/The New York Times\s*/gi, '')
+            .replace(/^.*?SKIP TO CONTENT.*?(?:New York Times|The Athletic).*?(?=Trump|[A-Z][a-z]+\s+[A-Z][a-z]+)/gmi, '')
+            .replace(/^.*?GIVE THE TIMES.*?Account.*?(?=Trump|[A-Z][a-z]+\s+[A-Z][a-z]+)/gmi, '')
+            .replace(/\n\s*\n/g, '\n\n')
+            .replace(/\s{3,}/g, ' ')
+            .trim();
     }
 }
 
@@ -237,19 +235,53 @@ chrome.tabs.onRemoved.addListener(tabId => {
   }
 });
 
+// --- Tab Glow Functions ---
+
+function enableTabGlow(tabId) {
+    if (!tabId) return;
+    chrome.tabs.sendMessage(tabId, {
+        type: 'ENABLE_TAB_GLOW'
+    }, () => {
+        if (chrome.runtime.lastError) {
+            console.log('[AIMultiChat] Could not enable tab glow (script may not be ready)');
+        } else {
+            console.log('[AIMultiChat] Tab glow enabled for tab', tabId);
+        }
+    });
+}
+
+function disableTabGlow(tabId) {
+    if (!tabId) return;
+    chrome.tabs.sendMessage(tabId, {
+        type: 'DISABLE_TAB_GLOW'
+    }, () => {
+        if (chrome.runtime.lastError) {
+            // Ignore errors for tabs that might be closed or don't have the script
+        } else {
+            console.log('[AIMultiChat] Tab glow disabled for tab', tabId);
+        }
+    });
+}
+
 // --- Companion Mode Listeners ---
 
 // Schedules a series of caching operations to capture dynamically loaded content.
 function scheduleCompanionCaching(tabId, isNewNavigation = false) {
+    console.log('[COMPANION TRACE] scheduleCompanionCaching called:', tabId, 'isNewNavigation:', isNewNavigation, 'lastActiveTabId:', companionState.lastActiveTabId, 'companionWindowId:', companionState.companionWindowId);
+    
     const cacheIfActive = () => {
         // Only cache if companion mode is active and it's still the same tab.
+        console.log('[COMPANION TRACE] cacheIfActive check - companionWindowId:', companionState.companionWindowId, 'tabId:', tabId, 'lastActiveTabId:', companionState.lastActiveTabId);
         if (companionState.companionWindowId && tabId === companionState.lastActiveTabId) {
+            console.log('[COMPANION TRACE] Conditions met, calling cachePageContentForCompanion for tab:', tabId);
             cachePageContentForCompanion(tabId);
+        } else {
+            console.log('[COMPANION TRACE] Skipping cache - companion inactive or tab changed');
         }
     };
 
     if (isNewNavigation) {
-        console.log('[AIMultiChat] Scheduling content caching for new navigation');
+        console.log('[COMPANION TRACE] Scheduling content caching for new navigation, tab:', tabId);
         // For new page loads, wait a bit longer before first attempt
         setTimeout(cacheIfActive, 500);  // Initial delay for page to start loading
         setTimeout(cacheIfActive, 2000); // 2-second follow-up for basic content
@@ -257,7 +289,7 @@ function scheduleCompanionCaching(tabId, isNewNavigation = false) {
         setTimeout(cacheIfActive, 10000); // 10-second follow-up for very slow content
         setTimeout(cacheIfActive, 15000); // 15-second follow-up for very slow sites like WSJ/NYT
     } else {
-        console.log('[AIMultiChat] Scheduling content caching for existing page');
+        console.log('[COMPANION TRACE] Scheduling content caching for existing page, tab:', tabId);
         // For existing pages or tab switches, cache immediately
         cacheIfActive();
         // Then schedule follow-up caching for dynamic content
@@ -268,31 +300,59 @@ function scheduleCompanionCaching(tabId, isNewNavigation = false) {
 }
 
 async function activateCompanionForTab(tabId) {
+    console.log('[COMPANION TRACE] activateCompanionForTab called:', tabId, 'companionWindowId:', companionState.companionWindowId, 'companionTabId:', companionState.companionTabId);
     if (!companionState.companionWindowId || !tabId || tabId === companionState.companionTabId) {
+        console.log('[COMPANION TRACE] Skipping activation - no companion window, no tabId, or tab is companion tab');
         return;
     }
 
     try {
         const tab = await chrome.tabs.get(tabId);
+        console.log('[COMPANION TRACE] Got tab info:', tab.url);
         if (!tab.url?.startsWith('http')) {
+            console.log('[COMPANION TRACE] Non-web page, clearing content and disabling glow');
             // Clear companion content for non-web pages
             if (companionState.copyContext) {
                 sendToCompanion('');
             }
+            // Disable glow for non-web pages
+            disableTabGlow(tabId);
             return;
         }
     } catch (e) {
-        console.error(`Companion mode could not get tab ${tabId}: ${e.message}`);
+        console.error(`[COMPANION TRACE] Could not get tab ${tabId}: ${e.message}`);
         return; // Tab may have closed
     }
 
     // Clear cache when switching to a different tab
     if (companionState.lastActiveTabId !== tabId) {
+        console.log('[COMPANION TRACE] Switching from tab', companionState.lastActiveTabId, 'to tab', tabId);
         companionState.cachedPageContent = null;
         companionState.cachedPageUrl = null;
+        // Disable glow on previous tab
+        if (companionState.lastActiveTabId) {
+            disableTabGlow(companionState.lastActiveTabId);
+        }
     }
     
     companionState.lastActiveTabId = tabId;
+    console.log('[COMPANION TRACE] Updated lastActiveTabId to:', tabId);
+
+    // Inject the tab glow script (only if not already injected)
+    try {
+        await chrome.scripting.executeScript({
+            target: { tabId: tabId, allFrames: false },
+            files: ['src/content/tab-glow.js'],
+        });
+        console.log('[COMPANION TRACE] Tab glow script injected successfully for tab:', tabId);
+        
+        // Enable the glow effect
+        enableTabGlow(tabId);
+    } catch (e) {
+        // If injection fails, it might already be injected, so try to enable glow anyway
+        console.log(`[COMPANION TRACE] Could not inject tab glow script into tab ${tabId}. Trying to enable glow anyway.`);
+        enableTabGlow(tabId);
+    }
 
     // Inject the listener to ensure it's active on the target tab.
     try {
@@ -300,27 +360,34 @@ async function activateCompanionForTab(tabId) {
             target: { tabId: tabId, allFrames: true },
             files: ['src/content/selection-listener.js'],
         });
+        console.log('[COMPANION TRACE] Selection listener injected successfully for tab:', tabId);
     } catch (e) {
-        console.log(`Could not inject selection listener into tab ${tabId}. This is expected for special pages (e.g., chrome web store).`);
+        console.log(`[COMPANION TRACE] Could not inject selection listener into tab ${tabId}. This is expected for special pages (e.g., chrome web store).`);
     }
 
     // Only cache content if copyContext is enabled
     if (companionState.copyContext) {
+        console.log('[COMPANION TRACE] copyContext enabled, scheduling content caching for tab:', tabId);
         // Cache the full page content with scheduled retries for dynamic content.
         scheduleCompanionCaching(tabId);
+    } else {
+        console.log('[COMPANION TRACE] copyContext disabled, skipping content caching');
     }
 }
 
 chrome.tabs.onActivated.addListener(activeInfo => {
+    console.log('[COMPANION TRACE] Tab activated:', activeInfo.tabId, 'companion active:', !!companionState.companionWindowId);
     activateCompanionForTab(activeInfo.tabId);
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    console.log('[COMPANION TRACE] Tab updated:', tabId, 'changeInfo:', changeInfo, 'companion active:', !!companionState.companionWindowId, 'copyContext:', companionState.copyContext);
     if (companionState.companionWindowId && companionState.copyContext && changeInfo.status === 'complete' && tab.url?.startsWith('http')) {
         // Check if this is the currently active tab or the tracked tab
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        console.log('[COMPANION TRACE] Page load completed for tab:', tabId, 'activeTab:', activeTab?.id, 'lastActiveTabId:', companionState.lastActiveTabId);
         if ((activeTab && activeTab.id === tabId) || tabId === companionState.lastActiveTabId) {
-            console.log('[AIMultiChat] Page load completed, activating companion and scheduling updates');
+            console.log('[COMPANION TRACE] Activating companion and scheduling updates for tab:', tabId);
             // Ensure companion mode is active for this tab
             await activateCompanionForTab(tabId);
             // This is a page that just finished loading, treat as new navigation
@@ -330,19 +397,23 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 });
 
 chrome.webNavigation.onHistoryStateUpdated.addListener(details => {
+    console.log('[COMPANION TRACE] History state updated:', details.tabId, 'lastActiveTabId:', companionState.lastActiveTabId, 'companion active:', !!companionState.companionWindowId);
     if (companionState.companionWindowId && companionState.copyContext && details.tabId === companionState.lastActiveTabId && details.frameId === 0) {
+        console.log('[COMPANION TRACE] SPA navigation detected, scheduling caching for tab:', details.tabId);
         // History state update (SPA navigation), treat as new navigation
         scheduleCompanionCaching(details.tabId, true);
     }
 });
 
 chrome.webNavigation.onCompleted.addListener(async (details) => {
+    console.log('[COMPANION TRACE] Navigation completed:', details.tabId, 'frameId:', details.frameId, 'companion active:', !!companionState.companionWindowId);
     // Ensure it's the main frame and companion mode is active
     if (details.frameId === 0 && companionState.companionWindowId && companionState.copyContext) {
         // Check if this is the currently active tab or the tracked tab
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        console.log('[COMPANION TRACE] Navigation completed - activeTab:', activeTab?.id, 'lastActiveTabId:', companionState.lastActiveTabId);
         if ((activeTab && activeTab.id === details.tabId) || details.tabId === companionState.lastActiveTabId) {
-            console.log('[AIMultiChat] Navigation completed, activating companion and scheduling updates');
+            console.log('[COMPANION TRACE] Navigation completed for tracked tab, activating companion and scheduling updates');
             // Ensure companion mode is active for this tab
             await activateCompanionForTab(details.tabId);
             // Navigation completed, treat as new navigation
@@ -353,17 +424,19 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
 
 // Additional listener for when navigation starts - clears last content so new page will definitely be sent
 chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
+    console.log('[COMPANION TRACE] Before navigate:', details.tabId, 'frameId:', details.frameId, 'companion active:', !!companionState.companionWindowId);
     if (details.frameId === 0 && companionState.companionWindowId) {
         // Check if this is the currently active tab
         const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        console.log('[COMPANION TRACE] Before navigate - activeTab:', activeTab?.id, 'lastActiveTabId:', companionState.lastActiveTabId);
         if (activeTab && activeTab.id === details.tabId) {
-            console.log('[AIMultiChat] Navigation starting in active tab, clearing content cache and activating companion mode');
+            console.log('[COMPANION TRACE] Navigation starting in active tab, clearing content cache and activating companion mode');
             companionState.cachedPageContent = null;
             companionState.cachedPageUrl = null;
             // Activate companion mode for this tab (handles new tabs that weren't tracked before)
             activateCompanionForTab(details.tabId);
         } else if (details.tabId === companionState.lastActiveTabId) {
-            console.log('[AIMultiChat] Navigation starting in tracked tab, clearing content cache');
+            console.log('[COMPANION TRACE] Navigation starting in tracked tab, clearing content cache');
             companionState.cachedPageContent = null;
             companionState.cachedPageUrl = null;
         }
@@ -418,8 +491,10 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
   switch (msg.type) {
     case 'REGISTER_SERVICE':
       if (sender.tab && msg.service) {
+        console.log('[COMPANION TRACE] Service registered:', msg.service, 'for tab:', sender.tab.id, 'companionTabId:', companionState.companionTabId);
         registerServiceTab(msg.service, sender.tab.id);
         if (companionState.companionTabId === sender.tab.id && companionState.lastActiveTabId && companionState.copyContext) {
+            console.log('[COMPANION TRACE] Companion tab registered, scheduling caching for lastActiveTabId:', companionState.lastActiveTabId);
             scheduleCompanionCaching(companionState.lastActiveTabId);
         }
         sendResponse({ ok: true });
@@ -470,11 +545,14 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
         break;
     case 'UPDATE_COMPANION_SETTINGS':
         if (msg.settings) {
+            console.log('[COMPANION TRACE] Updating companion settings:', msg.settings, 'lastActiveTabId:', companionState.lastActiveTabId);
             Object.assign(companionState, msg.settings);
             chrome.storage.local.set({ companionSettings: msg.settings });
             if (msg.settings.copyContext && companionState.lastActiveTabId) {
+                console.log('[COMPANION TRACE] copyContext enabled, scheduling caching for lastActiveTabId:', companionState.lastActiveTabId);
                 scheduleCompanionCaching(companionState.lastActiveTabId);
             } else if (!msg.settings.copyContext) {
+                console.log('[COMPANION TRACE] copyContext disabled, clearing cached content');
                 companionState.cachedPageContent = null;
                 companionState.cachedPageUrl = null;
             }
@@ -510,6 +588,16 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
             content: companionState.cachedPageContent,
             url: companionState.cachedPageUrl
         });
+        break;
+    case 'REFRESH_PAGE_CONTENT':
+        // Manual refresh of page content for companion mode
+        if (companionState.companionWindowId && companionState.lastActiveTabId) {
+            console.log('[AIMultiChat] Manual refresh requested for tab:', companionState.lastActiveTabId);
+            scheduleCompanionCaching(companionState.lastActiveTabId);
+            sendResponse({ success: true });
+        } else {
+            sendResponse({ success: false, error: 'No active tab to refresh' });
+        }
         break;
     case 'AUTO_RETILE':
         if (msg.targets && msg.targets.length > 0) {
@@ -654,7 +742,7 @@ async function startCompanionMode(service) {
     chrome.system.display.getInfo(async (displays) => {
         const display = displays[0].workArea;
         const companionWidth = 400; // Fixed width instead of 1/3 of screen
-        const controlPanelHeight = 55; // Increased by 10px from 45
+        const controlPanelHeight = 55; // Base height, will expand when options are shown
         const companionTop = display.top + controlPanelHeight;
         const companionHeight = display.height - controlPanelHeight;
 
@@ -735,6 +823,11 @@ async function startCompanionMode(service) {
 }
 
 async function stopCompanionMode() {
+    // Disable glow on the last active tab
+    if (companionState.lastActiveTabId) {
+        disableTabGlow(companionState.lastActiveTabId);
+    }
+
     // Restore original browser window if we have the info
     if (companionState.originalBrowserWindow) {
         try {
@@ -790,22 +883,43 @@ async function switchCompanionService(newService) {
     
     // If there was an active tab and copy context is enabled, send its content
     if (currentTabId && currentSettings.copyContext) {
-        scheduleCompanionUpdates(currentTabId);
+        scheduleCompanionCaching(currentTabId);
     }
 }
 
+// Helper function to truncate content to approximately 3500 words
+function truncateToWordLimit(text, maxWords = 3500) {
+    if (!text) return text;
+    
+    const words = text.trim().split(/\s+/);
+    if (words.length <= maxWords) {
+        return text;
+    }
+    
+    const truncated = words.slice(0, maxWords).join(' ');
+    return truncated + '\n\n[Content truncated - showing first ' + maxWords + ' words of ' + words.length + ' total words]';
+}
+
 async function cachePageContentForCompanion(tabId, selectedText = null) {
-    if (!tabId || !companionState.companionWindowId || !companionState.copyContext) return;
+    console.log('[COMPANION TRACE] cachePageContentForCompanion called:', tabId, 'companionWindowId:', companionState.companionWindowId, 'copyContext:', companionState.copyContext);
+    if (!tabId || !companionState.companionWindowId || !companionState.copyContext) {
+        console.log('[COMPANION TRACE] Skipping cache - missing conditions');
+        return;
+    }
     try {
         const tab = await chrome.tabs.get(tabId);
+        console.log('[COMPANION TRACE] Tab URL:', tab.url);
         if (!tab.url?.startsWith('http')) {
+            console.log('[COMPANION TRACE] Non-web URL, clearing cache');
             // Clear cache for non-web pages
             companionState.cachedPageContent = null;
             companionState.cachedPageUrl = null;
+            // Notify companion panel of content update
+            notifyCompanionPanelOfContentUpdate(null, tab.url);
             return;
         }
         
-        console.log('[AIMultiChat] Caching content from tab:', tab.url);
+        console.log('[COMPANION TRACE] Starting content extraction for tab:', tab.url);
         
         const injectionResults = await chrome.scripting.executeScript({
             target: { tabId: tabId, allFrames: true },
@@ -813,7 +927,11 @@ async function cachePageContentForCompanion(tabId, selectedText = null) {
         });
         
         if (injectionResults && injectionResults.length > 0) {
-            const fullText = injectionResults.map(r => r.result).filter(Boolean).join('\n\n---\n\n').trim();
+            let fullText = injectionResults.map(r => r.result).filter(Boolean).join('\n\n---\n\n').trim();
+            
+            // Apply size limits - truncate to ~3500 words
+            fullText = truncateToWordLimit(fullText, 3500);
+            
             console.log('[AIMultiChat DEBUG] Cached content length:', fullText.length, 'for:', tab.url);
             console.log('[AIMultiChat DEBUG] Content preview:', fullText.substring(0, 200) + '...');
             
@@ -827,16 +945,46 @@ async function cachePageContentForCompanion(tabId, selectedText = null) {
             }
             
             console.log('[AIMultiChat DEBUG] Final cached content length:', companionState.cachedPageContent.length);
+            
+            // Notify companion panel of content update
+            notifyCompanionPanelOfContentUpdate(companionState.cachedPageContent, tab.url);
         } else {
-            console.log('[AIMultiChat] No content found to cache');
+            console.log('[COMPANION TRACE] No content found to cache for tab:', tabId);
             companionState.cachedPageContent = null;
             companionState.cachedPageUrl = null;
+            // Notify companion panel of content update
+            notifyCompanionPanelOfContentUpdate(null, tab.url);
         }
     } catch (e) { 
-        console.error("[AIMultiChat] Error caching page content:", e.message);
+        console.error("[COMPANION TRACE] Error caching page content for tab", tabId, ":", e.message);
         companionState.cachedPageContent = null;
         companionState.cachedPageUrl = null;
+        // Notify companion panel of content update
+        notifyCompanionPanelOfContentUpdate(null, tab?.url);
     }
+}
+
+// Helper function to notify companion panel of content updates
+function notifyCompanionPanelOfContentUpdate(content, url) {
+    if (!companionState.controlPanelWindowId) return;
+    
+    chrome.tabs.query({ windowId: companionState.controlPanelWindowId }, (tabs) => {
+        if (tabs && tabs.length > 0) {
+            // const preview = content ? content.substring(0, 500) + '...' : '';
+            const preview = content;
+            chrome.tabs.sendMessage(tabs[0].id, {
+                type: 'CONTENT_CACHE_UPDATED',
+                hasContent: !!content,
+                preview: preview,
+                url: url,
+                wordCount: content ? content.split(/\s+/).length : 0
+            }, () => {
+                if (chrome.runtime.lastError) {
+                    // Control panel script may not be ready yet
+                }
+            });
+        }
+    });
 }
 
 function sendToCompanion(content) {

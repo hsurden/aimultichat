@@ -37,12 +37,8 @@
       "https://*.deepseek.com/*",
       "https://grok.com/*",
       "https://grok.x.ai/*",
-      "https://chat.*/*",
-      "https://*.ai/*",
       "https://poe.com/*",
-      "https://bard.google.com/*",
       "https://copilot.microsoft.com/*",
-      "https://character.ai/*",
       "https://you.com/*",
       "https://phind.com/*",
       "https://beta.character.ai/*"
