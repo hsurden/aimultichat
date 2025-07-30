@@ -420,6 +420,25 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
             scheduleCompanionCaching(details.tabId, true);
         }
     }
+    
+    // Check if tab navigated to an AI service and trigger re-registration
+    if (details.frameId === 0) {
+        try {
+            const hostname = new URL(details.url).hostname.replace(/^www\./, '');
+            
+            // Check if the new URL matches any AI service
+            for (const serviceKey of Object.keys(SERVICES)) {
+                if (SERVICES[serviceKey].match.test(hostname)) {
+                    console.log(`[AIMultiChat] Tab ${details.tabId} navigated to AI service ${serviceKey}, content script should re-register`);
+                    // The content script will handle re-registration automatically when it loads
+                    // We just log this for debugging purposes
+                    break;
+                }
+            }
+        } catch (e) {
+            // Invalid URL, ignore
+        }
+    }
 });
 
 // Additional listener for when navigation starts - clears last content so new page will definitely be sent
@@ -439,6 +458,42 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
             console.log('[COMPANION TRACE] Navigation starting in tracked tab, clearing content cache');
             companionState.cachedPageContent = null;
             companionState.cachedPageUrl = null;
+        }
+    }
+    
+    // Check if tab is navigating away from an AI service
+    if (details.frameId === 0) {
+        try {
+            const hostname = new URL(details.url).hostname.replace(/^www\./, '');
+            let isAIService = false;
+            
+            // Check if the new URL matches any AI service
+            for (const serviceKey of Object.keys(SERVICES)) {
+                if (SERVICES[serviceKey].match.test(hostname)) {
+                    isAIService = true;
+                    break;
+                }
+            }
+            
+            // If navigating away from AI service, clean up service registration
+            if (!isAIService) {
+                let changed = false;
+                Object.keys(serviceTabs).forEach(serviceKey => {
+                    if (serviceTabs[serviceKey] && serviceTabs[serviceKey].has(details.tabId)) {
+                        console.log(`[AIMultiChat] Tab ${details.tabId} navigating away from AI service, removing ${serviceKey} registration`);
+                        serviceTabs[serviceKey].delete(details.tabId);
+                        if (serviceTabs[serviceKey].size === 0) {
+                            delete serviceTabs[serviceKey];
+                        }
+                        changed = true;
+                    }
+                });
+                if (changed) {
+                    broadcastStatusUpdate();
+                }
+            }
+        } catch (e) {
+            // Invalid URL, ignore
         }
     }
 });
@@ -776,7 +831,7 @@ async function startCompanionMode(service) {
 
         // Create the main AI companion window first
         const companionWindow = await chrome.windows.create({
-            url: guessLandingUrl(service),
+            url: getServiceUrl(service),
             type: 'popup',
             width: companionWidth,
             height: companionHeight,
@@ -1038,7 +1093,7 @@ async function handleModeStart(mode) {
 
 async function openTabsInWindow(targets) {
     for (const serviceKey of targets) {
-        await chrome.tabs.create({ url: guessLandingUrl(serviceKey), active: false });
+        await chrome.tabs.create({ url: getServiceUrl(serviceKey), active: false });
     }
 }
 
@@ -1053,15 +1108,32 @@ function tileWindowsVertical(servicesToTile) {
     }
     tiledWindowIds.clear();
     
+    // Filter out invalid services - only keep services defined in SERVICES config
+    const filteredServices = servicesToTile.filter(service => {
+        const isValid = typeof service === 'string' && 
+                       service.length > 0 && 
+                       service.length < 50 && 
+                       SERVICES.hasOwnProperty(service);
+        if (!isValid) {
+            console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
+        }
+        return isValid;
+    });
+    
+    if (filteredServices.length === 0) {
+        console.warn('[AIMultiChat] No valid services to tile, using defaults');
+        filteredServices.push('chatgpt', 'claude', 'gemini');
+    }
+    
     const screenWidth = display.width, screenHeight = display.height;
     const popupWidth = Math.floor(screenWidth / 4);
     const servicesAreaWidth = screenWidth - popupWidth;
-    const numServices = servicesToTile.length;
+    const numServices = filteredServices.length;
     const serviceWindowWidth = numServices > 0 ? Math.floor(servicesAreaWidth / numServices) : 0;
     if (popupWindowId) { try { await chrome.windows.remove(popupWindowId); } catch (e) { /*ignore*/ } popupWindowId = null; }
     for (let i = 0; i < numServices; i++) {
-      const serviceKey = servicesToTile[i];
-      const newWindow = await chrome.windows.create({ url: guessLandingUrl(serviceKey), left: display.left + i * serviceWindowWidth, top: display.top, width: serviceWindowWidth, height: screenHeight });
+      const serviceKey = filteredServices[i];
+      const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey), left: display.left + i * serviceWindowWidth, top: display.top, width: serviceWindowWidth, height: screenHeight });
       if (newWindow) { tiledWindowIds.add(newWindow.id); }
     }
     createPopupWindow({ left: display.left + servicesAreaWidth, top: display.top, width: popupWidth, height: screenHeight });
@@ -1079,26 +1151,85 @@ async function tileWindowsBottom(servicesToTile) {
         }
         tiledWindowIds.clear();
         if (popupWindowId) { try { await chrome.windows.remove(popupWindowId); } catch (e) { /*ignore*/ } popupWindowId = null; }
+        
+        // Filter out invalid services - only keep services defined in SERVICES config
+        const filteredServices = servicesToTile.filter(service => {
+            const isValid = typeof service === 'string' && 
+                           service.length > 0 && 
+                           service.length < 50 && 
+                           SERVICES.hasOwnProperty(service);
+            if (!isValid) {
+                console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
+            }
+            return isValid;
+        });
+        
+        if (filteredServices.length === 0) {
+            console.warn('[AIMultiChat] No valid services to tile, using defaults');
+            filteredServices.push('chatgpt', 'claude', 'gemini');
+        }
+        
         const bottomPopupHeight = 140;
         const servicesAreaHeight = display.height - bottomPopupHeight;
-        const numServices = servicesToTile.length;
+        const numServices = filteredServices.length;
         const serviceWindowWidth = numServices > 0 ? Math.floor(display.width / numServices) : 0;
         for (let i = 0; i < numServices; i++) {
-            const serviceKey = servicesToTile[i];
-            const newWindow = await chrome.windows.create({ url: guessLandingUrl(serviceKey), left: display.left + i * serviceWindowWidth, top: display.top, width: serviceWindowWidth, height: servicesAreaHeight });
+            const serviceKey = filteredServices[i];
+            const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey), left: display.left + i * serviceWindowWidth, top: display.top, width: serviceWindowWidth, height: servicesAreaHeight });
             if (newWindow) { tiledWindowIds.add(newWindow.id); }
         }
         createPopupWindow({ url: 'src/popup/popup.html?layout=bottom', left: display.left, top: display.top + servicesAreaHeight, width: display.width, height: bottomPopupHeight });
     });
 }
 
-function guessLandingUrl(service) {
-  switch (service) {
-    case 'chatgpt': return 'https://chatgpt.com/';
-    case 'claude': return 'https://claude.ai/new';
-    case 'gemini': return 'https://gemini.google.com/app';
-    case 'deepseek': return 'https://chat.deepseek.com/';
-    case 'grok': return 'https://grok.com/';
-    default: return `https://www.${service}.com`;
+function getServiceUrl(serviceKey) {
+  // Use SERVICES config to get proper URLs instead of guessing
+  const serviceConfig = SERVICES[serviceKey];
+  if (!serviceConfig) {
+    console.warn(`[AIMultiChat] Unknown service: ${serviceKey}. Falling back to ChatGPT.`);
+    return 'https://chatgpt.com/';
   }
+  
+  // Extract hostname from the regex pattern and construct URL
+  const match = serviceConfig.match;
+  let hostname;
+  
+  switch (serviceKey) {
+    case 'chatgpt':
+      hostname = 'chatgpt.com';
+      break;
+    case 'claude':
+      hostname = 'claude.ai';
+      return 'https://claude.ai/new'; // Claude needs the /new path
+    case 'gemini':
+      hostname = 'gemini.google.com';
+      return 'https://gemini.google.com/app'; // Gemini needs the /app path
+    case 'perplexity':
+      hostname = 'perplexity.ai';
+      break;
+    case 'deepseek':
+      hostname = 'chat.deepseek.com';
+      break;
+    case 'grok':
+      hostname = 'grok.com';
+      break;
+    case 'zai':
+      hostname = 'chat.z.ai';
+      break;
+    case 'qwen':
+      hostname = 'chat.qwen.ai';
+      break;
+    default:
+      // Try to extract hostname from regex if possible
+      const regexStr = match.toString();
+      const hostMatch = regexStr.match(/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+      if (hostMatch) {
+        hostname = hostMatch[1].replace(/\\\./g, '.');
+      } else {
+        console.warn(`[AIMultiChat] Could not determine URL for service: ${serviceKey}`);
+        return 'https://chatgpt.com/';
+      }
+  }
+  
+  return `https://${hostname}/`;
 }

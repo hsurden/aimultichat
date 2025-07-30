@@ -78,3 +78,52 @@ The extension manages browser windows for tiling modes:
 - Status tracking with visual pills showing idle/pending/sent/error states
 
 When modifying service configurations, always update both `services-config.js` and `services-config-content.js` to maintain consistency between popup and content script contexts.
+
+## Adding a New AI Service
+
+To add a new built-in AI service to the extension, you must update **4 files**:
+
+### 1. Service Configuration Files (Required)
+**File: `src/services-config.js`** - Add service config to SERVICES object:
+```javascript
+servicename: {
+  label: "Service Name",
+  match: /hostname\.domain\.com$/,
+  inputSelectors: [
+    '#input-id',
+    'textarea[placeholder*="text"]',
+    'div[contenteditable="true"]'
+  ],
+  sendButtonSelectors: [
+    '#send-button-id',
+    'button[type="submit"]',
+    'button[aria-label*="Send"]'
+  ],
+  useEnter: true
+}
+```
+
+**File: `src/services-config-content.js`** - Add identical config to DEFAULT_SERVICES object
+
+### 2. Background Script URL Mapping (Required)
+**File: `src/background.js`** - Add case to `getServiceUrl()` function (~line 1142):
+```javascript
+case 'servicename':
+  hostname = 'hostname.domain.com';
+  break;
+```
+Special cases may need custom paths (e.g., Claude needs `/new`, Gemini needs `/app`)
+
+### 3. Content Script Permissions (Required)
+**File: `manifest.json`** - Add URL pattern to content_scripts.matches array:
+```json
+"https://hostname.domain.com/*"
+```
+
+### 4. Service Detection Requirements
+- **Hostname regex**: Must match the domain where the service runs
+- **Input selectors**: Array of CSS selectors for text input fields (textarea, contenteditable divs)
+- **Send button selectors**: Array of CSS selectors for submit buttons
+- **useEnter flag**: Whether Enter key should trigger send (vs requiring button click)
+
+The extension will automatically detect and register the service when users visit the configured hostname. Test thoroughly as AI service UIs change frequently.

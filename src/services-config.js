@@ -2,7 +2,7 @@
 // To add a new service:
 // 1. Add service config here and in services-config-content.js
 // 2. Add specific URL to manifest.json content_scripts.matches (if not covered by patterns)
-// 3. Add case to guessLandingUrl() in background.js if needed
+// 3. Add case to getServiceUrl() in background.js if needed
 // 4. The extension will automatically detect and register the service
 
 export const SERVICES = {
@@ -103,6 +103,42 @@ export const SERVICES = {
     sendButtonSelectors: [
       'button[aria-label*="Send"]',
       'button[type="submit"]',
+      'button:has(svg)',
+      '.send-button'
+    ],
+    useEnter: true
+  },
+  zai: {
+    label: "Z AI",
+    match: /chat\.z\.ai$/,
+    inputSelectors: [
+      '#chat-input',
+      'textarea[placeholder*="How can I help you today?"]',
+      'textarea',
+      'div[contenteditable="true"]'
+    ],
+    sendButtonSelectors: [
+      '#send-message-button',
+      'button[type="submit"]',
+      'button[aria-label*="Send"]',
+      'button:has(svg)',
+      '.sendMessageButton'
+    ],
+    useEnter: true
+  },
+  qwen: {
+    label: "Qwen",
+    match: /chat\.qwen\.ai$/,
+    inputSelectors: [
+      '#chat-input',
+      'textarea[placeholder*="How can I help you today?"]',
+      '.text-area-box-web',
+      'textarea',
+      'div[contenteditable="true"]'
+    ],
+    sendButtonSelectors: [
+      'button[type="submit"]',
+      'button[aria-label*="Send"]',
       'button:has(svg)',
       '.send-button'
     ],
