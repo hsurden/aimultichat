@@ -220,16 +220,26 @@ chrome.windows.onRemoved.addListener((closedWindowId) => {
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
+  //console.log(`[BG DEBUG] Tab ${tabId} was closed`);
   let changed = false;
+  let removedFrom = [];
+  
   Object.keys(serviceTabs).forEach(s => {
     if (serviceTabs[s] && serviceTabs[s].has(tabId)) {
       serviceTabs[s].delete(tabId);
+      removedFrom.push(s);
       if (serviceTabs[s].size === 0) {
         delete serviceTabs[s];
+        console.log(`[BG DEBUG] Service ${s} has no tabs left after tab closure, removing service`);
       }
       changed = true;
     }
   });
+  
+  if (removedFrom.length > 0) {
+    console.log(`[BG DEBUG] Closed tab ${tabId} was registered for services: ${removedFrom.join(', ')}`);
+  }
+  
   if (changed) {
     broadcastStatusUpdate();
   }
@@ -503,6 +513,31 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
 
 // Remove the action click listener - we'll use context menu instead
 
+// Helper function to find which display contains a given window
+function getDisplayForWindow(windowInfo, displays) {
+    // Check if window has valid position
+    if (windowInfo.left === undefined || windowInfo.top === undefined) {
+        return displays[0]; // Fallback to primary display
+    }
+
+    // Find the display that contains the window's center point
+    const windowCenterX = windowInfo.left + (windowInfo.width || 0) / 2;
+    const windowCenterY = windowInfo.top + (windowInfo.height || 0) / 2;
+
+    for (const display of displays) {
+        const bounds = display.workArea;
+        if (windowCenterX >= bounds.left &&
+            windowCenterX < bounds.left + bounds.width &&
+            windowCenterY >= bounds.top &&
+            windowCenterY < bounds.top + bounds.height) {
+            return display;
+        }
+    }
+
+    // If no display contains the window center, return the primary display
+    return displays[0];
+}
+
 function createPopupWindow(windowConfig = {}) {
   const defaults = { width: 420, height: 320 };
   chrome.system.display.getInfo((displays) => {
@@ -537,8 +572,22 @@ function broadcastStatusUpdate() {
 }
 
 function registerServiceTab(service, tabId) {
-  if (!serviceTabs[service]) { serviceTabs[service] = new Set(); }
+  //console.log(`[BG DEBUG] Registering tab ${tabId} for service: ${service}`);
+  if (!serviceTabs[service]) { 
+    serviceTabs[service] = new Set(); 
+    console.log(`[BG DEBUG] Created new service entry for: ${service}`);
+  }
+  
+  const wasAlreadyRegistered = serviceTabs[service].has(tabId);
   serviceTabs[service].add(tabId);
+  
+  if (wasAlreadyRegistered) {
+    console.log(`[BG DEBUG] Tab ${tabId} was already registered for ${service} (re-registration)`);
+  } else {
+    console.log(`[BG DEBUG] Successfully registered new tab ${tabId} for ${service}`);
+  }
+  
+  console.log(`[BG DEBUG] Service ${service} now has ${serviceTabs[service].size} tabs: [${[...serviceTabs[service]].join(', ')}]`);
   broadcastStatusUpdate();
 }
 
@@ -742,12 +791,34 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
 });
 
 function broadcastPrompt(text, targets, messageType) {
+  //console.log('[BG DEBUG] Broadcasting prompt to targets:', targets);
+  //console.log('[BG DEBUG] Current serviceTabs state:', JSON.stringify(serviceTabs));
+  
   for (const service of targets) {
     const tabs = serviceTabs[service];
-    if (!tabs) continue;
+    //console.log(`[BG DEBUG] Service ${service} has tabs:`, tabs ? [...tabs] : 'none');
+    
+    if (!tabs) {
+      console.log(`[BG DEBUG] No tabs registered for service: ${service}`);
+      continue;
+    }
+    
     for (const tabId of tabs) {
-      chrome.tabs.sendMessage(tabId, { type: messageType, text, service }, () => {
-          if (chrome.runtime.lastError) { /* ignore */ }
+      //console.log(`[BG DEBUG] Sending message to tab ${tabId} for service ${service}`);
+      chrome.tabs.sendMessage(tabId, { type: messageType, text, service }, (response) => {
+          if (chrome.runtime.lastError) { 
+     
+            // Send failure feedback to popup
+            chrome.runtime.sendMessage({ 
+              type: 'SERVICE_FEEDBACK', 
+              service: service, 
+              tabId: tabId, 
+              status: 'error', 
+              error: chrome.runtime.lastError.message 
+            });
+          } else {
+            console.log(`[BG DEBUG] Message sent successfully to tab ${tabId}`);
+          }
       });
     }
   }
@@ -785,17 +856,20 @@ async function getFullPageContentFromActiveTab() {
 
 async function startCompanionMode(service) {
     if (companionState.companionWindowId) { await stopCompanionMode(); }
-    
+
     const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
     if (!lastFocusedWindow) { return; }
 
     const [activeTab] = await chrome.tabs.query({ active: true, windowId: lastFocusedWindow.id });
-    
+
     const prefs = await chrome.storage.local.get('companionSettings');
     Object.assign(companionState, prefs.companionSettings);
 
     chrome.system.display.getInfo(async (displays) => {
-        const display = displays[0].workArea;
+        // Find the display that contains the current browser window
+        const currentDisplay = getDisplayForWindow(lastFocusedWindow, displays);
+        const display = currentDisplay.workArea;
+
         const companionWidth = 400; // Fixed width instead of 1/3 of screen
         const controlPanelHeight = 55; // Base height, will expand when options are shown
         const companionTop = display.top + controlPanelHeight;
@@ -853,7 +927,7 @@ async function startCompanionMode(service) {
         companionState.controlPanelWindowId = controlPanelWindow.id;
         companionState.companionTabId = companionWindow.tabs[0].id;
         companionState.service = service;
-        
+
         // Mark the companion tab for Enter key interception
         setTimeout(() => {
             chrome.tabs.sendMessage(companionState.companionTabId, {
@@ -1097,34 +1171,40 @@ async function openTabsInWindow(targets) {
     }
 }
 
-function tileWindowsVertical(servicesToTile) {
+async function tileWindowsVertical(servicesToTile) {
+  // Get the currently focused window to determine which screen to use
+  const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+
   chrome.system.display.getInfo(async (displays) => {
     if (chrome.runtime.lastError) { console.error(chrome.runtime.lastError.message); return; }
-    const display = displays[0].workArea;
-    
+
+    // Find the display that contains the current browser window
+    const currentDisplay = lastFocusedWindow ? getDisplayForWindow(lastFocusedWindow, displays) : displays[0];
+    const display = currentDisplay.workArea;
+
     // Close existing tiled windows first
     for (const windowId of tiledWindowIds) {
       try { await chrome.windows.remove(windowId); } catch (e) { /*ignore*/ }
     }
     tiledWindowIds.clear();
-    
+
     // Filter out invalid services - only keep services defined in SERVICES config
     const filteredServices = servicesToTile.filter(service => {
-        const isValid = typeof service === 'string' && 
-                       service.length > 0 && 
-                       service.length < 50 && 
+        const isValid = typeof service === 'string' &&
+                       service.length > 0 &&
+                       service.length < 50 &&
                        SERVICES.hasOwnProperty(service);
         if (!isValid) {
             console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
         }
         return isValid;
     });
-    
+
     if (filteredServices.length === 0) {
         console.warn('[AIMultiChat] No valid services to tile, using defaults');
         filteredServices.push('chatgpt', 'claude', 'gemini');
     }
-    
+
     const screenWidth = display.width, screenHeight = display.height;
     const popupWidth = Math.floor(screenWidth / 4);
     const servicesAreaWidth = screenWidth - popupWidth;
@@ -1141,34 +1221,40 @@ function tileWindowsVertical(servicesToTile) {
 }
 
 async function tileWindowsBottom(servicesToTile) {
+    // Get the currently focused window to determine which screen to use
+    const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+
     chrome.system.display.getInfo(async (displays) => {
         if (chrome.runtime.lastError) { console.error(chrome.runtime.lastError.message); return; }
-        const display = displays[0].workArea;
-        
+
+        // Find the display that contains the current browser window
+        const currentDisplay = lastFocusedWindow ? getDisplayForWindow(lastFocusedWindow, displays) : displays[0];
+        const display = currentDisplay.workArea;
+
         // Close existing tiled windows first
         for (const windowId of tiledWindowIds) {
             try { await chrome.windows.remove(windowId); } catch (e) { /*ignore*/ }
         }
         tiledWindowIds.clear();
         if (popupWindowId) { try { await chrome.windows.remove(popupWindowId); } catch (e) { /*ignore*/ } popupWindowId = null; }
-        
+
         // Filter out invalid services - only keep services defined in SERVICES config
         const filteredServices = servicesToTile.filter(service => {
-            const isValid = typeof service === 'string' && 
-                           service.length > 0 && 
-                           service.length < 50 && 
+            const isValid = typeof service === 'string' &&
+                           service.length > 0 &&
+                           service.length < 50 &&
                            SERVICES.hasOwnProperty(service);
             if (!isValid) {
                 console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
             }
             return isValid;
         });
-        
+
         if (filteredServices.length === 0) {
             console.warn('[AIMultiChat] No valid services to tile, using defaults');
             filteredServices.push('chatgpt', 'claude', 'gemini');
         }
-        
+
         const bottomPopupHeight = 140;
         const servicesAreaHeight = display.height - bottomPopupHeight;
         const numServices = filteredServices.length;
