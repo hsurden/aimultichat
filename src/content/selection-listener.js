@@ -218,14 +218,27 @@ function loadAIServiceScript(serviceName, serviceConfig) {
         if (sendButton && !sendButton.disabled) {
             sendButton.click();
         } else if (cfg.useEnter) {
-            const enterEvent = new KeyboardEvent('keydown', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true
+            ['keydown', 'keypress', 'keyup'].forEach(type => {
+                const enterEvent = new KeyboardEvent(type, {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    charCode: 13,
+                    bubbles: true,
+                    cancelable: true
+                });
+                ['keyCode', 'which', 'charCode'].forEach(prop => {
+                    if (enterEvent[prop] !== 13) {
+                        Object.defineProperty(enterEvent, prop, {
+                            value: 13,
+                            writable: false,
+                            configurable: true
+                        });
+                    }
+                });
+                inputEl.dispatchEvent(enterEvent);
             });
-            inputEl.dispatchEvent(enterEvent);
         }
     }
     

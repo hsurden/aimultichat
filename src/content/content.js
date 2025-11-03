@@ -82,9 +82,17 @@ log(`🔍 Debug: hostname=${location.hostname}, serviceName=${serviceName}`);
 if (!serviceName) {
   log('❌ Not a monitored domain');
 } else {
-  log(`✅ Registering service: ${serviceName}`);
-  chrome.runtime.sendMessage({ type: 'REGISTER_SERVICE', service: serviceName });
+  log(`✅ Registering service: ${serviceName} for tab`);
+  chrome.runtime.sendMessage({ type: 'REGISTER_SERVICE', service: serviceName }, (response) => {
+    if (chrome.runtime.lastError) {
+      log(`❌ Registration failed: ${chrome.runtime.lastError.message}`);
+    } else {
+      log(`✅ Registration confirmed for ${serviceName}`);
+    }
+  });
 }
+
+
 
 let cfg = SERVICES[serviceName] || {};
 log(`⚙️ Service config for ${serviceName}:`, cfg);
@@ -207,10 +215,29 @@ function performSend(inputEl) {
   
   // Standard behavior for other services
   if (cfg.useEnter) {
-    const kd = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
-    inputEl.dispatchEvent(kd);
-    const ku = new KeyboardEvent('keyup', { key: 'Enter', bubbles: true });
-    inputEl.dispatchEvent(ku);
+    const enterEventTypes = ['keydown', 'keypress', 'keyup'];
+    enterEventTypes.forEach(type => {
+      const event = new KeyboardEvent(type, {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        charCode: 13,
+        bubbles: true,
+        cancelable: true
+      });
+      // Ensure legacy properties are populated for handlers that rely on them
+      ['keyCode', 'which', 'charCode'].forEach(prop => {
+        if (event[prop] !== 13) {
+          Object.defineProperty(event, prop, {
+            value: 13,
+            writable: false,
+            configurable: true
+          });
+        }
+      });
+      inputEl.dispatchEvent(event);
+    });
     return true;
   }
   const btn = findFirst(cfg.sendButtonSelectors || []);
@@ -219,8 +246,25 @@ function performSend(inputEl) {
     return true;
   }
   // Fallback: try Enter anyway
-  const kd = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
-  inputEl.dispatchEvent(kd);
+  const fallbackEvent = new KeyboardEvent('keydown', {
+    key: 'Enter',
+    code: 'Enter',
+    keyCode: 13,
+    which: 13,
+    charCode: 13,
+    bubbles: true,
+    cancelable: true
+  });
+  ['keyCode', 'which', 'charCode'].forEach(prop => {
+    if (fallbackEvent[prop] !== 13) {
+      Object.defineProperty(fallbackEvent, prop, {
+        value: 13,
+        writable: false,
+        configurable: true
+      });
+    }
+  });
+  inputEl.dispatchEvent(fallbackEvent);
   return true;
 }
 
