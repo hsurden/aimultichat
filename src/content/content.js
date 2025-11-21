@@ -95,6 +95,17 @@ if (!serviceName) {
 
 
 let cfg = SERVICES[serviceName] || {};
+function safeSetInnerHTML(el, html) {
+  if (!el) return;
+  try {
+    el.innerHTML = html;
+  } catch (error) {
+    console.warn('[AIMultiChat] safeSetInnerHTML blocked, falling back to textContent', error?.message);
+    console.warn('[AIMultiChat] Could not set innerHTML (trusted types?):', error?.message);
+    const fallbackText = (html || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/?[^>]+>/g, '');
+    el.textContent = fallbackText;
+  }
+}
 log(`⚙️ Service config for ${serviceName}:`, cfg);
 
 function log(...a) {
@@ -116,6 +127,7 @@ function findFirst(selectors) {
 // Insert text handling contenteditable vs textarea
 function insertPrompt(inputEl, text) {
   if (!inputEl) throw new Error('Input element missing');
+
   if (cfg.preFocus) inputEl.focus();
 
   if (inputEl.tagName === 'TEXTAREA' || inputEl.tagName === 'INPUT') {
@@ -140,21 +152,19 @@ function insertPrompt(inputEl, text) {
         quillContainer.__quill.focus();
       } else {
         // Approach 2: DOM manipulation
-        inputEl.innerHTML = '<p>' + text.replace(/\n/g, '</p><p>') + '</p>';
-        
-        // Approach 3: Also try execCommand
+        inputEl.textContent = '';
         inputEl.focus();
         document.execCommand('selectAll', false, null);
         document.execCommand('insertText', false, text);
       }
-      
+
       // Dispatch multiple events that Quill might listen to
       inputEl.dispatchEvent(new Event('input', { bubbles: true }));
       inputEl.dispatchEvent(new Event('change', { bubbles: true }));
       inputEl.dispatchEvent(new Event('keyup', { bubbles: true }));
       inputEl.dispatchEvent(new Event('blur', { bubbles: true }));
       inputEl.dispatchEvent(new Event('focus', { bubbles: true }));
-      
+
       // Try Angular's change detection if this is Angular
       if (window.ng && window.ng.getComponent) {
         try {
@@ -167,11 +177,29 @@ function insertPrompt(inputEl, text) {
         }
       }
     } else {
-      inputEl.textContent = ''; // Clear existing content
-      inputEl.scrollTop = inputEl.scrollHeight; // Position at bottom before inserting
-      
-      // Insert text and immediately position cursor at end
-      document.execCommand('insertText', false, text);
+      if (serviceName === 'kimi') {
+        // FIXED: Kimi (Lexical) handling.
+        // Replaced specific Range selection with execCommand('selectAll').
+        // 'selectAll' is more robust for contenteditable areas, especially ensuring
+        // that trailing spaces and complex nested structures (like <p>) are fully selected.
+        
+        inputEl.focus();
+        document.execCommand('selectAll', false, null);
+        
+        // If text is empty, just delete. If text exists, insert it (which replaces selection).
+        if (!text) {
+          document.execCommand('delete');
+        } else {
+          document.execCommand('insertText', false, text);
+        }
+        
+      } else {
+        // Standard behavior for other services
+        inputEl.textContent = ''; // Clear existing content
+        inputEl.scrollTop = inputEl.scrollHeight; // Position at bottom before inserting
+        // Insert text and immediately position cursor at end
+        document.execCommand('insertText', false, text);
+      }
       
       // Immediately position cursor at the end without setTimeout
       const selection = window.getSelection();
@@ -184,13 +212,25 @@ function insertPrompt(inputEl, text) {
       }
     }
     
-    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+    // Kimi handles its own events via execCommand above, so we skip duplicate dispatching
+    if (serviceName !== 'kimi') {
+      const inputEvent = new Event('input', { bubbles: true });
+      inputEl.dispatchEvent(inputEvent);
+    }
   } else {
     // Fallback: set textContent
     inputEl.focus();
     inputEl.scrollTop = inputEl.scrollHeight; // Position at bottom first
     inputEl.textContent = text;
     inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  if (serviceName === 'kimi') {
+    console.log('[AI Multi-Chat DEBUG] insertPrompt result', {
+      serviceName,
+      tagName: inputEl.tagName,
+      textSnapshot: (inputEl.textContent || '').substring(0, 100)
+    });
   }
 }
 
@@ -298,6 +338,7 @@ function waitForInput(maxMs = 5000, interval = 100) {
       } else if (performance.now() - start > maxMs) {
         clearInterval(timer);
         observer.disconnect();
+        console.warn('[AI Multi-Chat DEBUG] waitForInput timeout', { serviceName, selectors: cfg.inputSelectors });
         reject(new Error('Timeout locating input'));
       }
     }, interval);
@@ -305,8 +346,23 @@ function waitForInput(maxMs = 5000, interval = 100) {
 }
 
 async function injectAndSend(text) {
-  const inputEl = await waitForInput();
+  console.log('[AI Multi-Chat DEBUG] injectAndSend', { serviceName, textLength: text?.length });
+  let inputEl;
+  try {
+    inputEl = await waitForInput();
+  } catch (error) {
+    console.error('[AI Multi-Chat DEBUG] waitForInput failed', { serviceName, error: error.message });
+    throw error;
+  }
+  console.log('[AI Multi-Chat DEBUG] injectAndSend found input', { serviceName, tagName: inputEl?.tagName, className: inputEl?.className });
   insertPrompt(inputEl, text);
+  if (serviceName === 'kimi') {
+    console.log('[AI Multi-Chat DEBUG] injectAndSend post insert', {
+      serviceName,
+      textContent: (inputEl.textContent || '').substring(0, 200),
+      htmlContent: (inputEl.innerHTML || '').substring(0, 200)
+    });
+  }
   // Longer delay for Gemini to allow UI to stabilize
   if (serviceName === 'gemini') {
     await new Promise(r => setTimeout(r, 300));
@@ -471,7 +527,6 @@ document.addEventListener('keydown', async (event) => {
             if (inputEl.tagName === 'TEXTAREA' || inputEl.tagName === 'INPUT') {
               inputEl.value = '';
             } else if (inputEl.isContentEditable) {
-              inputEl.innerHTML = '';
               inputEl.textContent = '';
             }
             
@@ -487,7 +542,7 @@ document.addEventListener('keydown', async (event) => {
               // Simplified insertion for ChatGPT - avoid complex insertPrompt function
               if (inputEl.isContentEditable) {
                 // For ChatGPT's contenteditable, set innerHTML directly
-                inputEl.innerHTML = finalText.replace(/\n/g, '<br>');
+                safeSetInnerHTML(inputEl, finalText.replace(/\n/g, '<br>'));
                 inputEl.focus();
                 
                 // Position cursor at end
@@ -520,7 +575,6 @@ document.addEventListener('keydown', async (event) => {
             if (inputEl.tagName === 'TEXTAREA' || inputEl.tagName === 'INPUT') {
               inputEl.value = '';
             } else if (inputEl.isContentEditable) {
-              inputEl.innerHTML = '';
               inputEl.textContent = '';
             }
             
@@ -532,7 +586,7 @@ document.addEventListener('keydown', async (event) => {
               
               // Simplified insertion for ChatGPT - avoid complex insertPrompt function
               if (inputEl.isContentEditable) {
-                inputEl.innerHTML = textToUse.replace(/\n/g, '<br>');
+                safeSetInnerHTML(inputEl, textToUse.replace(/\n/g, '<br>'));
                 inputEl.focus();
                 
                 // Position cursor at end
@@ -598,13 +652,16 @@ chrome.runtime.onMessage.addListener((msg) => {
       return;
     }
     
+    console.log('[AI Multi-Chat DEBUG] INJECT_TEXT_REALTIME text', { serviceName, length: msg.text?.length, sample: (msg.text || '').substring(0, 100) });
     (async () => {
       try {
         // Use a shorter timeout as this is less critical
         const inputEl = await waitForInput(1000);
+        console.log('[AI Multi-Chat DEBUG] INJECT_TEXT_REALTIME found input', { serviceName, tagName: inputEl?.tagName });
         insertPrompt(inputEl, msg.text);
       } catch (e) {
         // It's okay to fail silently here as the user is just typing
+        console.log('[AI Multi-Chat DEBUG] INJECT_TEXT_REALTIME failed', { serviceName, error: e.message });
         log('Could not find input for real-time sync.');
       }
     })();
