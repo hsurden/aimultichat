@@ -5,6 +5,70 @@ console.log('[BG] started');
 const serviceTabs = {};
 let popupWindowId = null;
 let tiledWindowIds = new Set();
+const BOTTOM_POPUP_HEIGHT = 140;
+const VERTICAL_POPUP_DIVISOR = 4;
+let tiledLayoutState = {
+    layout: null,
+    services: [],
+    displayId: null,
+    windows: []
+};
+
+function getDisplaysAsync() {
+    return new Promise((resolve) => {
+        chrome.system.display.getInfo((displays) => {
+            if (chrome.runtime.lastError || !displays) {
+                console.error('[AIMultiChat] Could not retrieve displays for retile:', chrome.runtime.lastError?.message);
+                resolve([]);
+            } else {
+                resolve(displays);
+            }
+        });
+    });
+}
+
+async function safeUpdateWindow(windowId, updateInfo) {
+    try {
+        await chrome.windows.update(windowId, updateInfo);
+    } catch (error) {
+        console.warn(`[AIMultiChat] Failed to update window ${windowId}:`, error?.message);
+    }
+}
+
+function getServiceKeyFromUrl(url) {
+    if (!url || !url.startsWith('http')) {
+        return null;
+    }
+    try {
+        const host = new URL(url).hostname.replace(/^www\./, '');
+        return Object.keys(SERVICES).find(key => SERVICES[key].match.test(host)) || null;
+    } catch (e) {
+        return null;
+    }
+}
+
+async function rebuildServiceTabRegistry() {
+    try {
+        Object.keys(serviceTabs).forEach(key => delete serviceTabs[key]);
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+            const serviceKey = getServiceKeyFromUrl(tab.url);
+            if (!serviceKey) { continue; }
+            if (!serviceTabs[serviceKey]) {
+                serviceTabs[serviceKey] = new Set();
+            }
+            serviceTabs[serviceKey].add(tab.id);
+        }
+        broadcastStatusUpdate();
+    } catch (error) {
+        console.error('[AIMultiChat] Failed to rebuild service registry:', error);
+    }
+}
+
+chrome.runtime.onInstalled.addListener(() => rebuildServiceTabRegistry());
+chrome.runtime.onStartup.addListener(() => rebuildServiceTabRegistry());
+rebuildServiceTabRegistry();
+
 let companionState = {
     companionWindowId: null, // The main AI service window
     controlPanelWindowId: null, // The tiny control bar window
@@ -712,6 +776,9 @@ chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
             }
         }
         break;
+    case 'RAISE_AND_RETILE':
+        raiseAndRetileTiledWindows();
+        break;
     case 'UPDATE_SERVICE_CONFIG':
         if (msg.serviceKey && msg.config) {
             // Store the updated config for runtime use
@@ -1205,17 +1272,29 @@ async function tileWindowsVertical(servicesToTile) {
         filteredServices.push('chatgpt', 'claude', 'gemini');
     }
 
+    const displayId = currentDisplay.id;
     const screenWidth = display.width, screenHeight = display.height;
-    const popupWidth = Math.floor(screenWidth / 4);
+    const popupWidth = Math.floor(screenWidth / VERTICAL_POPUP_DIVISOR);
     const servicesAreaWidth = screenWidth - popupWidth;
     const numServices = filteredServices.length;
     const serviceWindowWidth = numServices > 0 ? Math.floor(servicesAreaWidth / numServices) : 0;
     if (popupWindowId) { try { await chrome.windows.remove(popupWindowId); } catch (e) { /*ignore*/ } popupWindowId = null; }
+    const layoutState = {
+        layout: 'vertical',
+        services: [...filteredServices],
+        displayId,
+        windows: []
+    };
+
     for (let i = 0; i < numServices; i++) {
       const serviceKey = filteredServices[i];
       const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey), left: display.left + i * serviceWindowWidth, top: display.top, width: serviceWindowWidth, height: screenHeight });
-      if (newWindow) { tiledWindowIds.add(newWindow.id); }
+      if (newWindow) {
+          tiledWindowIds.add(newWindow.id);
+          layoutState.windows.push({ windowId: newWindow.id, serviceKey });
+      }
     }
+    tiledLayoutState = layoutState;
     createPopupWindow({ left: display.left + servicesAreaWidth, top: display.top, width: popupWidth, height: screenHeight });
   });
 }
@@ -1255,17 +1334,136 @@ async function tileWindowsBottom(servicesToTile) {
             filteredServices.push('chatgpt', 'claude', 'gemini');
         }
 
-        const bottomPopupHeight = 140;
+        const bottomPopupHeight = BOTTOM_POPUP_HEIGHT;
+        const displayId = currentDisplay.id;
         const servicesAreaHeight = display.height - bottomPopupHeight;
         const numServices = filteredServices.length;
         const serviceWindowWidth = numServices > 0 ? Math.floor(display.width / numServices) : 0;
+        const layoutState = {
+            layout: 'bottom',
+            services: [...filteredServices],
+            displayId,
+            windows: []
+        };
         for (let i = 0; i < numServices; i++) {
             const serviceKey = filteredServices[i];
             const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey), left: display.left + i * serviceWindowWidth, top: display.top, width: serviceWindowWidth, height: servicesAreaHeight });
-            if (newWindow) { tiledWindowIds.add(newWindow.id); }
+            if (newWindow) {
+                tiledWindowIds.add(newWindow.id);
+                layoutState.windows.push({ windowId: newWindow.id, serviceKey });
+            }
         }
+        tiledLayoutState = layoutState;
         createPopupWindow({ url: 'src/popup/popup.html?layout=bottom', left: display.left, top: display.top + servicesAreaHeight, width: display.width, height: bottomPopupHeight });
     });
+}
+
+async function applyBottomLayout(workArea) {
+    const entries = tiledLayoutState.windows;
+    if (!entries.length) { return; }
+    const servicesAreaHeight = Math.max(1, workArea.height - BOTTOM_POPUP_HEIGHT);
+    const totalWidth = Math.max(1, workArea.width);
+    const serviceWidth = Math.max(1, Math.floor(totalWidth / entries.length));
+
+    for (let i = 0; i < entries.length; i++) {
+        const left = workArea.left + i * serviceWidth;
+        const width = i === entries.length - 1
+            ? Math.max(1, totalWidth - (serviceWidth * i))
+            : serviceWidth;
+        await safeUpdateWindow(entries[i].windowId, {
+            left,
+            top: workArea.top,
+            width,
+            height: servicesAreaHeight,
+            state: 'normal'
+        });
+    }
+
+    if (popupWindowId) {
+        await safeUpdateWindow(popupWindowId, {
+            left: workArea.left,
+            top: workArea.top + servicesAreaHeight,
+            width: workArea.width,
+            height: BOTTOM_POPUP_HEIGHT,
+            state: 'normal'
+        });
+    }
+}
+
+async function applyVerticalLayout(workArea) {
+    const entries = tiledLayoutState.windows;
+    if (!entries.length) { return; }
+    const screenWidth = Math.max(1, workArea.width);
+    const screenHeight = Math.max(1, workArea.height);
+    const popupWidth = Math.max(1, Math.floor(screenWidth / VERTICAL_POPUP_DIVISOR));
+    const servicesAreaWidth = Math.max(1, screenWidth - popupWidth);
+    const serviceWidth = Math.max(1, Math.floor(servicesAreaWidth / entries.length));
+
+    for (let i = 0; i < entries.length; i++) {
+        const left = workArea.left + i * serviceWidth;
+        const width = i === entries.length - 1
+            ? Math.max(1, servicesAreaWidth - serviceWidth * i)
+            : serviceWidth;
+        await safeUpdateWindow(entries[i].windowId, {
+            left,
+            top: workArea.top,
+            width,
+            height: screenHeight,
+            state: 'normal'
+        });
+    }
+
+    if (popupWindowId) {
+        await safeUpdateWindow(popupWindowId, {
+            left: workArea.left + servicesAreaWidth,
+            top: workArea.top,
+            width: popupWidth,
+            height: screenHeight,
+            state: 'normal'
+        });
+    }
+}
+
+async function raiseAndRetileTiledWindows() {
+    if (!tiledLayoutState.layout || tiledLayoutState.windows.length === 0) {
+        console.log('[AIMultiChat] No tiled layout to retile');
+        return;
+    }
+
+    const displays = await getDisplaysAsync();
+    if (displays.length === 0) {
+        console.warn('[AIMultiChat] Unable to retile because no displays were returned');
+        return;
+    }
+
+    const targetDisplay = displays.find(d => d.id === tiledLayoutState.displayId) || displays[0];
+    if (!targetDisplay) {
+        console.warn('[AIMultiChat] Unable to locate target display for retile');
+        return;
+    }
+
+    tiledLayoutState.displayId = targetDisplay.id;
+    const workArea = targetDisplay.workArea;
+
+    for (const entry of tiledLayoutState.windows) {
+        try {
+            await chrome.windows.get(entry.windowId);
+        } catch (error) {
+            console.log('[AIMultiChat] Missing tiled window during retile, rebuilding layout');
+            if (tiledLayoutState.layout === 'bottom') {
+                tileWindowsBottom(tiledLayoutState.services);
+            } else if (tiledLayoutState.layout === 'vertical') {
+                tileWindowsVertical(tiledLayoutState.services);
+            }
+            return;
+        }
+    }
+
+    if (tiledLayoutState.layout === 'bottom') {
+        await applyBottomLayout(workArea);
+    } else if (tiledLayoutState.layout === 'vertical') {
+        await applyVerticalLayout(workArea);
+    }
 }
 
 function getServiceUrl(serviceKey) {
@@ -1304,6 +1502,9 @@ function getServiceUrl(serviceKey) {
       break;
     case 'qwen':
       hostname = 'chat.qwen.ai';
+      break;
+    case 'kimi':
+      hostname = 'kimi.com';
       break;
     default:
       // Try to extract hostname from regex if possible

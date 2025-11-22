@@ -178,21 +178,21 @@ function insertPrompt(inputEl, text) {
       }
     } else {
       if (serviceName === 'kimi') {
-        // FIXED: Kimi (Lexical) handling.
-        // Replaced specific Range selection with execCommand('selectAll').
-        // 'selectAll' is more robust for contenteditable areas, especially ensuring
-        // that trailing spaces and complex nested structures (like <p>) are fully selected.
-        
-        inputEl.focus();
-        document.execCommand('selectAll', false, null);
-        
-        // If text is empty, just delete. If text exists, insert it (which replaces selection).
-        if (!text) {
-          document.execCommand('delete');
-        } else {
-          document.execCommand('insertText', false, text);
-        }
-        
+          // FIXED: Kimi (Lexical) handling.
+          
+          inputEl.focus();
+          document.execCommand('selectAll', false, null);
+          
+          if (!text) {
+            document.execCommand('delete');
+          } else {
+            // CHANGE: Replace standard spaces with non-breaking spaces (\u00A0).
+            // This tricks the editor into seeing one continuous "word", bypassing
+            // the tokenizer that cuts off input at the first standard space.
+            const safeText = text.replace(/ /g, '\u00A0');
+            
+            document.execCommand('insertText', false, safeText);
+          }
       } else {
         // Standard behavior for other services
         inputEl.textContent = ''; // Clear existing content

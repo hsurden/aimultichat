@@ -17,6 +17,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const bottomGetContentButton = document.getElementById('bottomGetContent');
   const replayButton           = document.getElementById('replay');
   const openAllButton          = document.getElementById('openAll');
+  const retileButton           = document.getElementById('retile-windows');
 
   // --- Internal state ---
   const state = {
@@ -24,7 +25,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     serviceStatuses: {},
     isBottomMode: false,
     isInTileMode: false,
-    currentTileLayout: null // 'vertical' or 'bottom'
+    currentTileLayout: null, // 'vertical' or 'bottom'
+    debugInfo: {}, // Track detailed service/tab debug info
+    lastBroadcastTime: null,
+    broadcastHistory: [] // Track recent broadcasts for debugging
   };
 
   // --- Initialize Choices on the <select> (global Choices must already be loaded) ---
@@ -56,6 +60,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   
   // Populate dropdown initially
   await populateServiceChoices();
+  
+  // Periodic status refresh to catch stale tabs
+  setInterval(() => {
+    chrome.runtime.sendMessage({ type: 'REQUEST_STATUS' });
+    if (document.getElementById('debugPanel')?.open) {
+      updateDebugPanel(); // Refresh debug info if panel is open
+    }
+  }, 2000);
 
   // when selection changes, sync into state.targets
   servicesSelect.addEventListener('change', () => {
@@ -88,7 +100,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
 
   function handleAutoRetile() {
-    if (!state.isInTileMode || !state.currentTileLayout) return;
+    if (!state.isInTileMode || !state.currentTileLayout) return; 
     
     chrome.runtime.sendMessage({
       type: 'AUTO_RETILE',
@@ -99,6 +111,12 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   function updateCompanionButtonState() {
     if (companionButton) companionButton.disabled = state.targets.size !== 1;
+  }
+
+  function updateRetileButtonState() {
+    if (retileButton) {
+      retileButton.disabled = !state.isInTileMode;
+    }
   }
 
   function updateTilingOptionsState() {
@@ -120,29 +138,134 @@ window.addEventListener('DOMContentLoaded', async () => {
       const svcCell   = document.createElement('td');
       const tabsCell  = document.createElement('td');
       const statusCell= document.createElement('td');
+      const debugCell = document.createElement('td');
       const pill      = document.createElement('span');
 
       svcCell.textContent  = allServices[key].label;
-      tabsCell.textContent = info.tabs.length ? info.tabs.join(', ') : '–';
+      
+      // Enhanced tab display with debugging info
+      if (info.tabs.length) {
+        tabsCell.innerHTML = info.tabs.map(tabId => {
+          const debugInfo = state.debugInfo?.[key]?.[tabId];
+          let tabDisplay = `Tab ${tabId}`;
+          if (debugInfo) {
+            const age = Date.now() - debugInfo.lastSeen;
+            const ageText = age < 10000 ? 'active' : `${Math.floor(age/1000)}s ago`;
+            tabDisplay += ` (${ageText})`;
+          }
+          return tabDisplay;
+        }).join('<br>');
+      } else {
+        tabsCell.innerHTML = '<span style="color: #666;">No tabs registered</span>';
+      }
 
       pill.className = 'status-pill';
       pill.textContent = info.status;
       if (info.status === 'sent')  pill.classList.add('status-sent');
       if (info.status === 'error') pill.classList.add('status-error');
+      if (info.status === 'pending') pill.classList.add('status-pending');
       if (!state.targets.has(key)) pill.style.opacity = '0.4';
 
+      // Debug info cell
+      const debugInfo = state.debugInfo?.[key];
+      if (debugInfo) {
+        const totalTabs = Object.keys(debugInfo).length;
+        const activeTabs = Object.values(debugInfo).filter(tab => Date.now() - tab.lastSeen < 10000).length;
+        debugCell.innerHTML = `<small style="color: #666;">${activeTabs}/${totalTabs} active</small>`;
+      } else {
+        debugCell.innerHTML = '<small style="color: #999;">No debug info</small>';
+      }
+
       statusCell.appendChild(pill);
-      row.append(svcCell, tabsCell, statusCell);
+      row.append(svcCell, tabsCell, statusCell, debugCell);
       statusBody.appendChild(row);
     }
+    
+    updateDebugPanel();
+  }
+
+  function updateDebugPanel() {
+    const broadcastHistory = document.getElementById('broadcastHistory');
+    const tabDetails = document.getElementById('tabDetails');
+    
+    if (!broadcastHistory || !tabDetails) return; 
+    
+    // Update broadcast history
+    if (state.broadcastHistory.length > 0) {
+      broadcastHistory.innerHTML = `
+        <div style="margin-bottom: 10px;">
+          <strong>Recent Broadcasts:</strong><br>
+          ${state.broadcastHistory.map((broadcast, i) => {
+            const age = Math.floor((Date.now() - broadcast.time) / 1000);
+            return `${i + 1}. ${age}s ago: "${broadcast.textPreview}..." → [${broadcast.targets.join(', ')}]`;
+          }).join('<br>')}
+        </div>
+      `;
+    } else {
+      broadcastHistory.innerHTML = '<div style="color: #666;">No recent broadcasts</div>';
+    }
+    
+    // Update tab details
+    let tabDetailsHtml = '<div><strong>Tab Connection Details:</strong><br>';
+    let hasAnyTabs = false;
+    
+    for (const [service, serviceDebug] of Object.entries(state.debugInfo)) {
+      if (Object.keys(serviceDebug).length > 0) {
+        hasAnyTabs = true;
+        tabDetailsHtml += `<br><em>${SERVICES[service]?.label || service}:</em><br>`;
+        
+        for (const [tabId, tabInfo] of Object.entries(serviceDebug)) {
+          const age = Math.floor((Date.now() - tabInfo.lastSeen) / 1000);
+          const status = age > 10 ? '🔴 STALE' : '🟢 Active';
+          tabDetailsHtml += `&nbsp;&nbsp;Tab ${tabId}: ${status} (${age}s ago, ${tabInfo.registrations || 0} reg)`;
+          
+          if (tabInfo.lastFeedback) {
+            const feedbackAge = Math.floor((Date.now() - tabInfo.lastFeedback.time) / 1000);
+            tabDetailsHtml += ` - Last: ${tabInfo.lastFeedback.status} (${feedbackAge}s ago)`;
+          }
+          
+          tabDetailsHtml += '<br>';
+        }
+      }
+    }
+    
+    if (!hasAnyTabs) {
+      tabDetailsHtml += '<span style="color: #999;">No tabs registered yet</span>';
+    }
+    
+    tabDetailsHtml += '</div>';
+    tabDetails.innerHTML = tabDetailsHtml;
   }
 
   function updateStateWithStatus(services) {
+    const now = Date.now();
+    
     for (const [svc, tabs] of Object.entries(services)) {
       if (!state.serviceStatuses[svc]) {
         state.serviceStatuses[svc] = { tabs: [], status: 'idle' };
       }
       state.serviceStatuses[svc].tabs = tabs;
+      
+      // Update debug info
+      if (!state.debugInfo[svc]) {
+        state.debugInfo[svc] = {};
+      }
+      
+      // Mark all current tabs as recently seen
+      tabs.forEach(tabId => {
+        if (!state.debugInfo[svc][tabId]) {
+          state.debugInfo[svc][tabId] = { firstSeen: now, registrations: 0 };
+        }
+        state.debugInfo[svc][tabId].lastSeen = now;
+        state.debugInfo[svc][tabId].registrations += 1;
+      });
+      
+      // Mark missing tabs as stale
+      Object.keys(state.debugInfo[svc]).forEach(tabId => {
+        if (!tabs.includes(parseInt(tabId))) {
+          state.debugInfo[svc][tabId].status = 'stale';
+        }
+      });
     }
     renderStatusTable();
   }
@@ -155,6 +278,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (msg.type === 'SERVICE_FEEDBACK') {
       state.serviceStatuses[msg.service] ??= { tabs: [], status: 'idle' };
       state.serviceStatuses[msg.service].status = msg.status;
+      
+      // Track feedback in debug info
+      if (state.debugInfo[msg.service]?.[msg.tabId]) {
+        state.debugInfo[msg.service][msg.tabId].lastFeedback = {
+          status: msg.status,
+          time: Date.now(),
+          error: msg.error
+        };
+      }
+      
       renderStatusTable();
     }
     if (msg.type === 'GET_PAGE_CONTENT_FROM_ICON' && getContentButton) {
@@ -181,10 +314,40 @@ window.addEventListener('DOMContentLoaded', async () => {
   const handleBroadcast = () => {
     const text = promptEl.value.trim();
     if (!text) return;
+    
+    const broadcastTime = Date.now();
+    state.lastBroadcastTime = broadcastTime;
+    
+    // Add to broadcast history for debugging
+    state.broadcastHistory.unshift({
+      time: broadcastTime,
+      targets: [...state.targets],
+      textLength: text.length,
+      textPreview: text.substring(0, 100)
+    });
+    if (state.broadcastHistory.length > 10) state.broadcastHistory.pop();
+    
     for (const svc of state.targets) {
       state.serviceStatuses[svc] = state.serviceStatuses[svc] || { tabs: [], status: 'idle' };
       state.serviceStatuses[svc].status = 'pending';
+      
+      // Track broadcast attempt in debug info
+      if (state.debugInfo[svc]) {
+        Object.keys(state.debugInfo[svc]).forEach(tabId => {
+          if (!state.debugInfo[svc][tabId].broadcasts) {
+            state.debugInfo[svc][tabId].broadcasts = [];
+          }
+          state.debugInfo[svc][tabId].broadcasts.unshift({
+            time: broadcastTime,
+            textLength: text.length
+          });
+          if (state.debugInfo[svc][tabId].broadcasts.length > 5) {
+            state.debugInfo[svc][tabId].broadcasts.pop();
+          }
+        });
+      }
     }
+    
     renderStatusTable();
     chrome.runtime.sendMessage({
       type: 'BROADCAST_PROMPT',
@@ -245,6 +408,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Track tiling state
     state.isInTileMode = shouldTile;
     state.currentTileLayout = shouldTile ? (isBottomLayout ? 'bottom' : 'vertical') : null;
+    updateRetileButtonState();
     
     chrome.runtime.sendMessage({
       type: 'OPEN_SERVICES',
@@ -262,12 +426,31 @@ window.addEventListener('DOMContentLoaded', async () => {
       });
     }
   });
-  promptEl && (promptEl.addEventListener('input', e => {
+  retileButton           && (retileButton.onclick           = () => {
+    chrome.runtime.sendMessage({ type: 'RAISE_AND_RETILE' });
+  });
+  function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
+
+  const debouncedSync = debounce(text => {
     chrome.runtime.sendMessage({
       type: 'SYNC_PROMPT_TEXT',
-      text: e.target.value,
+      text,
       targets: [...state.targets]
     });
+  }, 200);
+
+  promptEl && (promptEl.addEventListener('input', e => {
+    debouncedSync(e.target.value);
   }));
   promptEl && (promptEl.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -318,6 +501,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     renderStatusTable();
     updateCompanionButtonState();
     updateTilingOptionsState();
+    updateRetileButtonState();
 
     // fetch latest statuses from background
     chrome.runtime.sendMessage({ type: 'REQUEST_STATUS' });

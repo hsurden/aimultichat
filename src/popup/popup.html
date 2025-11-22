@@ -39,10 +39,22 @@
 
   <table id="statusTable">
     <thead>
-      <tr><th>Service</th><th>Tabs</th><th>Status</th></tr>
+      <tr><th>Service</th><th>Tabs</th><th>Status</th><th>Debug</th></tr>
     </thead>
     <tbody id="statusBody"></tbody>
   </table>
+
+  <!-- Debug Panel -->
+  <div class="debug-actions">
+    <button id="retile-windows" title="Restore the tiled layout after minimizing windows">Retile</button>
+  </div>
+  <details id="debugPanel" style="margin-top: 10px;">
+    <summary style="cursor: pointer; font-weight: bold; color: #666;">🔍 Debug Information</summary>
+    <div id="debugContent" style="background: #f5f5f5; padding: 10px; margin: 5px 0; border-radius: 4px; font-family: monospace; font-size: 12px;">
+      <div id="broadcastHistory"></div>
+      <div id="tabDetails"></div>
+    </div>
+  </details>
 
   <!-- Bottom mode service panel (only visible in bottom layout) -->
   <!-- <div class="bottom-service-panel"> -->

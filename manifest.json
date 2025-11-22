@@ -39,6 +39,8 @@
       "https://grok.x.ai/*",
       "https://chat.z.ai/*",
       "https://chat.qwen.ai/*",
+      "https://*.kimi.com/*",
+      "https://kimi.com/*",
       "https://poe.com/*",
       "https://copilot.microsoft.com/*",
       "https://you.com/*",

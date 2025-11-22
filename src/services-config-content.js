@@ -145,6 +145,27 @@ const DEFAULT_SERVICES = {
     ],
     useEnter: true
   },
+  kimi: {
+  label: "Kimi",
+  match: /kimi\.com$/,
+  inputSelectors: [
+    '#chat-input',
+    'div.chat-input-editor',
+    'div.chat-input-editor-container div.chat-input-editor',
+    'div.chat-input-editor-container div[contenteditable="true"]',
+    'textarea[placeholder*="Ask Anything..."]',
+    '.text-area-box-web',
+    'textarea',
+    'div[contenteditable="true"]'
+  ],
+  sendButtonSelectors: [
+    'button[type="submit"]',
+    'button[aria-label*="Send"]',
+    'button:has(svg)',
+    '.send-button'
+  ],
+  useEnter: true
+},
 };
 
 let SERVICES = { ...DEFAULT_SERVICES };
