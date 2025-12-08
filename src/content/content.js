@@ -33,26 +33,26 @@ if (location.hostname === 'chatgpt.com') {
         overflow-y: auto !important;
       }
     `;
-    
+
     // Remove existing style if present
     const existing = document.getElementById('aimultichat-fixed-height');
     if (existing) existing.remove();
-    
+
     document.head.appendChild(style);
   }
-  
+
   // Inject immediately
   injectFixedHeightCSS();
-  
+
   // Re-inject on DOM changes (ChatGPT might be overriding)
   const observer = new MutationObserver(() => {
     if (!document.getElementById('aimultichat-fixed-height')) {
       injectFixedHeightCSS();
     }
   });
-  
+
   observer.observe(document.head, { childList: true });
-  
+
   // Also monitor for form changes
   const formObserver = new MutationObserver(() => {
     const form = document.querySelector('form[data-type="unified-composer"]');
@@ -65,7 +65,7 @@ if (location.hostname === 'chatgpt.com') {
       });
     }
   });
-  
+
   // Start observing once the page loads
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
@@ -113,6 +113,16 @@ function log(...a) {
   console.log('[AIMultiChat]', ...a);
 }
 
+// Helper to convert Base64 to File object
+function dataURLtoFile(dataurl, filename) {
+  var arr = dataurl.split(','), mime = arr[0].match(/:(.*?);/)[1],
+    bstr = atob(arr[1]), n = bstr.length, u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new File([u8arr], filename, { type: mime });
+}
+
 // Find element using multiple selectors
 function findFirst(selectors) {
   for (const sel of selectors) {
@@ -141,7 +151,7 @@ function insertPrompt(inputEl, text) {
   } else if (inputEl.isContentEditable) {
     // For contenteditable divs, clear content and position at bottom
     inputEl.focus();
-    
+
     // Special handling for Quill editor
     if (inputEl.classList.contains('ql-editor')) {
       // Try multiple approaches for Quill
@@ -178,21 +188,21 @@ function insertPrompt(inputEl, text) {
       }
     } else {
       if (serviceName === 'kimi') {
-          // FIXED: Kimi (Lexical) handling.
-          
-          inputEl.focus();
-          document.execCommand('selectAll', false, null);
-          
-          if (!text) {
-            document.execCommand('delete');
-          } else {
-            // CHANGE: Replace standard spaces with non-breaking spaces (\u00A0).
-            // This tricks the editor into seeing one continuous "word", bypassing
-            // the tokenizer that cuts off input at the first standard space.
-            const safeText = text.replace(/ /g, '\u00A0');
-            
-            document.execCommand('insertText', false, safeText);
-          }
+        // FIXED: Kimi (Lexical) handling.
+
+        inputEl.focus();
+        document.execCommand('selectAll', false, null);
+
+        if (!text) {
+          document.execCommand('delete');
+        } else {
+          // CHANGE: Replace standard spaces with non-breaking spaces (\u00A0).
+          // This tricks the editor into seeing one continuous "word", bypassing
+          // the tokenizer that cuts off input at the first standard space.
+          const safeText = text.replace(/ /g, '\u00A0');
+
+          document.execCommand('insertText', false, safeText);
+        }
       } else {
         // Standard behavior for other services
         inputEl.textContent = ''; // Clear existing content
@@ -200,18 +210,18 @@ function insertPrompt(inputEl, text) {
         // Insert text and immediately position cursor at end
         document.execCommand('insertText', false, text);
       }
-      
+
       // Immediately position cursor at the end without setTimeout
       const selection = window.getSelection();
       if (selection) {
-          const range = document.createRange();
-          range.selectNodeContents(inputEl);
-          range.collapse(false); // false collapses to the end
-          selection.removeAllRanges();
-          selection.addRange(range);
+        const range = document.createRange();
+        range.selectNodeContents(inputEl);
+        range.collapse(false); // false collapses to the end
+        selection.removeAllRanges();
+        selection.addRange(range);
       }
     }
-    
+
     // Kimi handles its own events via execCommand above, so we skip duplicate dispatching
     if (serviceName !== 'kimi') {
       const inputEvent = new Event('input', { bubbles: true });
@@ -236,23 +246,39 @@ function insertPrompt(inputEl, text) {
 
 // Attempt to send (Enter or button)
 function performSend(inputEl) {
-  // Special handling for Gemini - use enhanced Enter key events
   if (serviceName === 'gemini') {
-    // Use multiple Enter event approaches for Gemini for better compatibility
-    const enterEvents = [
-      new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }),
-      new KeyboardEvent('keypress', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true }),
-      new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true })
-    ];
-    
-    enterEvents.forEach(event => {
+    const sendButton = findFirst(cfg.sendButtonSelectors || []);
+    if (sendButton) {
+      sendButton.click();
+      return true;
+    }
+
+    // Fallback to non-bubbling Enter events if no send button is found
+    const enterEventTypes = ['keydown', 'keypress', 'keyup'];
+    enterEventTypes.forEach(type => {
+      const event = new KeyboardEvent(type, {
+        key: 'Enter',
+        code: 'Enter',
+        keyCode: 13,
+        which: 13,
+        charCode: 13,
+        bubbles: false,
+        cancelable: true
+      });
+      ['keyCode', 'which', 'charCode'].forEach(prop => {
+        if (event[prop] !== 13) {
+          Object.defineProperty(event, prop, {
+            value: 13,
+            writable: false,
+            configurable: true
+          });
+        }
+      });
       inputEl.dispatchEvent(event);
-      document.dispatchEvent(event);
     });
-    
     return true;
   }
-  
+
   // Standard behavior for other services
   if (cfg.useEnter) {
     const enterEventTypes = ['keydown', 'keypress', 'keyup'];
@@ -380,23 +406,23 @@ let isCompanionMode = false;
 // Function to get current text from input element
 function getInputText(inputEl) {
   if (!inputEl) return '';
-  
+
   if (inputEl.tagName === 'TEXTAREA' || inputEl.tagName === 'INPUT') {
     return inputEl.value || '';
   } else if (inputEl.isContentEditable) {
     // For ChatGPT's ProseMirror editor, use a more reliable approach
     let text = '';
-    
+
     // First try to get text from the entire editor content
     text = inputEl.textContent || inputEl.innerText || '';
-    
+
     // If still empty, try looking at the current cursor position and extract text
     if (!text.trim()) {
       const selection = window.getSelection();
       if (selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const container = range.commonAncestorContainer;
-        
+
         // Try to get text from the container or its parent
         if (container.nodeType === Node.TEXT_NODE) {
           text = container.parentElement.textContent || container.parentElement.innerText || '';
@@ -405,7 +431,7 @@ function getInputText(inputEl) {
         }
       }
     }
-    
+
     // If still empty, traverse all text nodes in the editor
     if (!text.trim()) {
       const walker = document.createTreeWalker(
@@ -424,7 +450,7 @@ function getInputText(inputEl) {
       }
       text = textNodes.join(' ');
     }
-    
+
     console.log('[AIMultiChat DEBUG] getInputText result:', JSON.stringify(text));
     return text;
   }
@@ -442,17 +468,17 @@ let isPerformingSend = false; // Flag to prevent intercepting our own performSen
 
 document.addEventListener('input', (event) => {
   if (!isCompanionMode) return;
-  
+
   // Skip tracking if we're currently inserting combined content
   if (isInsertingCombinedContent) {
     console.log('[AIMultiChat DEBUG] Skipping input tracking during content insertion');
     return;
   }
-  
+
   const inputEl = findFirst(cfg.inputSelectors);
   if (inputEl && (event.target === inputEl || inputEl.contains(event.target))) {
     const currentContent = getInputText(inputEl);
-    
+
     // If the content starts with "Page content", it means cached content was inserted
     // We need to extract only the user's actual typed text
     if (currentContent.startsWith('Page content """')) {
@@ -460,7 +486,7 @@ document.addEventListener('input', (event) => {
       console.log('[AIMultiChat DEBUG] Ignoring cached content insertion');
       return;
     }
-    
+
     // Track only genuine user input - always update if content exists and isn't cached content
     if (currentContent.trim()) {
       userTypedText = currentContent;
@@ -473,7 +499,7 @@ document.addEventListener('input', (event) => {
 // Single unified Enter key handler for companion mode
 document.addEventListener('keydown', async (event) => {
   if (!isCompanionMode) return;
-  
+
   // Check if Enter was pressed (not Shift+Enter)
   if (event.key === 'Enter' && !event.shiftKey) {
     // Skip if this is our own performSend operation
@@ -481,70 +507,70 @@ document.addEventListener('keydown', async (event) => {
       console.log('[AIMultiChat DEBUG] Skipping Enter interception during performSend');
       return;
     }
-    
+
     const inputEl = findFirst(cfg.inputSelectors);
-    
+
     // More flexible check for whether we're in the right input
     const isInInputArea = inputEl && (
-      event.target === inputEl || 
-      inputEl.contains(event.target) || 
+      event.target === inputEl ||
+      inputEl.contains(event.target) ||
       document.activeElement === inputEl ||
       inputEl.contains(document.activeElement)
     );
-    
+
     if (isInInputArea) {
       console.log('[AIMultiChat DEBUG] Enter key detected in companion mode');
-      
+
       // CRITICAL: Prevent the default Enter behavior immediately and aggressively
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      
+
       // Capture text right at the moment of Enter press
       const currentText = getInputText(inputEl);
       const textToUse = currentText || userTypedText || '';
-      
+
       console.log('[AIMultiChat DEBUG] Current input text:', JSON.stringify(currentText));
       console.log('[AIMultiChat DEBUG] Tracked user text:', JSON.stringify(userTypedText));
       console.log('[AIMultiChat DEBUG] Final text to use:', JSON.stringify(textToUse));
-      
+
       if (textToUse.trim()) {
         console.log('[AIMultiChat] Companion mode Enter intercepted, requesting cached content');
-        
+
         // Ask background for cached content
         chrome.runtime.sendMessage({
           type: 'GET_CACHED_CONTENT'
         }, (response) => {
           console.log('[AIMultiChat DEBUG] Cached content response length:', response?.content?.length || 0);
-          
+
           // Only proceed if we have cached content to add
           if (response && response.content && response.content.trim()) {
             const finalText = `Page content """\n${response.content}\n"""\n\n${textToUse}`;
             console.log('[AIMultiChat DEBUG] Final combined text length:', finalText.length);
             console.log('[AIMultiChat DEBUG] Final text preview:', finalText.substring(0, 200) + '...');
-            
+
             // Clear the input first to ensure we start fresh
             if (inputEl.tagName === 'TEXTAREA' || inputEl.tagName === 'INPUT') {
               inputEl.value = '';
             } else if (inputEl.isContentEditable) {
               inputEl.textContent = '';
             }
-            
+
             // Reset tracking variables
             userTypedText = '';
             currentTypedText = '';
-            
+
             // Wait a moment for the clear to take effect, then insert combined content
             setTimeout(() => {
               console.log('[AIMultiChat DEBUG] Inserting combined text after clear');
               isInsertingCombinedContent = true; // Disable input tracking
-              
+
               // Simplified insertion for ChatGPT - avoid complex insertPrompt function
               if (inputEl.isContentEditable) {
                 // For ChatGPT's contenteditable, set innerHTML directly
                 safeSetInnerHTML(inputEl, finalText.replace(/\n/g, '<br>'));
                 inputEl.focus();
-                
+
                 // Position cursor at end
                 const range = document.createRange();
                 const sel = window.getSelection();
@@ -557,7 +583,7 @@ document.addEventListener('keydown', async (event) => {
                 inputEl.value = finalText;
                 inputEl.focus();
               }
-              
+
               // Then submit after another short delay
               setTimeout(() => {
                 console.log('[AIMultiChat DEBUG] About to perform send');
@@ -577,18 +603,18 @@ document.addEventListener('keydown', async (event) => {
             } else if (inputEl.isContentEditable) {
               inputEl.textContent = '';
             }
-            
+
             userTypedText = '';
             currentTypedText = '';
-            
+
             setTimeout(() => {
               isInsertingCombinedContent = true; // Disable input tracking
-              
+
               // Simplified insertion for ChatGPT - avoid complex insertPrompt function
               if (inputEl.isContentEditable) {
                 safeSetInnerHTML(inputEl, textToUse.replace(/\n/g, '<br>'));
                 inputEl.focus();
-                
+
                 // Position cursor at end
                 const range = document.createRange();
                 const sel = window.getSelection();
@@ -600,7 +626,7 @@ document.addEventListener('keydown', async (event) => {
                 inputEl.value = textToUse;
                 inputEl.focus();
               }
-              
+
               setTimeout(() => {
                 isPerformingSend = true; // Prevent our handler from intercepting performSend
                 performSend(inputEl);
@@ -620,8 +646,111 @@ document.addEventListener('keydown', async (event) => {
   }
 }, true); // Use capture phase to intercept before ChatGPT's handlers
 
+// Extract the last response from the AI service
+function extractLastResponse() {
+  const responseSelectors = cfg.responseSelectors || [];
+
+  // Find all response elements
+  let allResponses = [];
+  for (const selector of responseSelectors) {
+    try {
+      const elements = document.querySelectorAll(selector);
+      if (elements.length > 0) {
+        allResponses = Array.from(elements);
+        break;
+      }
+    } catch (_) { /* ignore invalid selector */ }
+  }
+
+  if (allResponses.length === 0) {
+    return null;
+  }
+
+  // Get the last response element
+  const lastResponse = allResponses[allResponses.length - 1];
+
+  // Extract text content
+  const text = lastResponse.textContent || lastResponse.innerText || '';
+  return text.trim();
+}
+
 // Listen for broadcast messages
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // Handle response extraction for discuss feature
+  if (msg.type === 'EXTRACT_RESPONSE') {
+    console.log(`[AIMultiChat DISCUSS] EXTRACT_RESPONSE received for ${msg.service}, this tab is ${serviceName}`);
+
+    if (msg.service === serviceName) {
+      const responseText = extractLastResponse();
+      console.log(`[AIMultiChat DISCUSS] Extracted response length: ${responseText?.length || 0}`);
+
+      sendResponse({
+        service: serviceName,
+        label: cfg.label,
+        response: responseText,
+        success: !!responseText
+      });
+      return true; // Keep channel open for async response
+    }
+  }
+
+  // Handles file upload simulation via paste event
+  if (msg.type === 'UPLOAD_FILE' && msg.service === serviceName) {
+    console.log('[AIMultiChat] Received UPLOAD_FILE for', msg.fileData.name);
+    try {
+      const file = dataURLtoFile(msg.fileData.dataBase64, msg.fileData.name);
+
+      // Find the input area to paste into
+      const inputEl = findFirst(cfg.inputSelectors || []);
+
+      if (!inputEl) {
+        throw new Error('No input element found');
+      }
+
+      // Focus the input first
+      inputEl.focus();
+
+      // Create DataTransfer with the file
+      const dt = new DataTransfer();
+      dt.items.add(file);
+
+      // Create and dispatch a paste event with the file
+      const pasteEvent = new ClipboardEvent('paste', {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: dt
+      });
+
+      console.log('[AIMultiChat] Dispatching paste event for', msg.fileData.name);
+      inputEl.dispatchEvent(pasteEvent);
+
+      // Some services may need the event on the document level too
+      setTimeout(() => {
+        document.dispatchEvent(new ClipboardEvent('paste', {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: dt
+        }));
+      }, 100);
+
+      console.log('[AIMultiChat] Simulated file paste for', msg.fileData.name);
+
+      chrome.runtime.sendMessage({
+        type: 'SERVICE_FEEDBACK',
+        service: serviceName,
+        status: 'sent'
+      });
+    } catch (e) {
+      console.error('[AIMultiChat] File upload failed:', e);
+      chrome.runtime.sendMessage({
+        type: 'SERVICE_FEEDBACK',
+        service: serviceName,
+        status: 'error',
+        error: 'Upload failed: ' + e.message
+      });
+    }
+  }
+
   // Handles the main "Broadcast" action
   if (msg.type === 'INJECT_AND_SEND' && msg.service === serviceName) {
     (async () => {
@@ -651,7 +780,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       console.log('[AIMultiChat DEBUG] Skipping real-time injection in companion mode');
       return;
     }
-    
+
     console.log('[AI Multi-Chat DEBUG] INJECT_TEXT_REALTIME text', { serviceName, length: msg.text?.length, sample: (msg.text || '').substring(0, 100) });
     (async () => {
       try {
@@ -666,18 +795,18 @@ chrome.runtime.onMessage.addListener((msg) => {
       }
     })();
   }
-  
+
   // Mark this tab as companion mode
   if (msg.type === 'MARK_AS_COMPANION' && msg.service === serviceName) {
     isCompanionMode = true;
     console.log('[AIMultiChat] Tab marked as companion mode, Enter key interception enabled');
     console.log('[AIMultiChat DEBUG] Service name:', serviceName);
     console.log('[AIMultiChat DEBUG] Available input selectors:', cfg.inputSelectors);
-    
+
     // Test if we can find the input element immediately
     const testInput = findFirst(cfg.inputSelectors);
     console.log('[AIMultiChat DEBUG] Can find input element:', testInput);
-    
+
     // Add an even more aggressive Enter interceptor that runs first
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -686,15 +815,15 @@ chrome.runtime.onMessage.addListener((msg) => {
           console.log('[AIMultiChat DEBUG] Aggressive interceptor allowing performSend through');
           return;
         }
-        
+
         const inputEl = findFirst(cfg.inputSelectors);
         const isInInputArea = inputEl && (
-          e.target === inputEl || 
-          inputEl.contains(e.target) || 
+          e.target === inputEl ||
+          inputEl.contains(e.target) ||
           document.activeElement === inputEl ||
           inputEl.contains(document.activeElement)
         );
-        
+
         if (isInInputArea) {
           console.log('[AIMultiChat DEBUG] Aggressive Enter interception - preventing all handlers');
           e.preventDefault();
@@ -704,14 +833,14 @@ chrome.runtime.onMessage.addListener((msg) => {
       }
     }, true); // Capture phase, highest priority
   }
-  
+
   // Handle service configuration updates
   if (msg.type === 'SERVICE_CONFIG_UPDATED' && msg.serviceKey === serviceName) {
     handleServiceConfigUpdate(msg.serviceKey, msg.config);
     // Update the local cfg reference
     cfg = SERVICES[serviceName] || {};
   }
-  
+
   // Handle custom service addition
   if (msg.type === 'ADD_CUSTOM_SERVICE') {
     handleAddCustomService(msg.serviceKey, msg.config);
@@ -724,7 +853,7 @@ chrome.runtime.onMessage.addListener((msg) => {
       chrome.runtime.sendMessage({ type: 'REGISTER_SERVICE', service: serviceName });
     }
   }
-  
+
   // Handle custom service removal
   if (msg.type === 'REMOVE_CUSTOM_SERVICE' && msg.serviceKey === serviceName) {
     handleRemoveCustomService(msg.serviceKey);

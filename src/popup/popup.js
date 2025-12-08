@@ -18,6 +18,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const replayButton           = document.getElementById('replay');
   const openAllButton          = document.getElementById('openAll');
   const retileButton           = document.getElementById('retile-windows');
+  const discussButton          = document.getElementById('discuss-button');
 
   // --- Internal state ---
   const state = {
@@ -428,6 +429,128 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   retileButton           && (retileButton.onclick           = () => {
     chrome.runtime.sendMessage({ type: 'RAISE_AND_RETILE' });
+  });
+
+  // Upload button handler
+  const uploadButton = document.getElementById('upload-button');
+  const fileInput = document.getElementById('file-upload-input');
+
+  uploadButton && (uploadButton.onclick = () => {
+    fileInput && fileInput.click();
+  });
+
+  fileInput && (fileInput.onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (state.targets.size === 0) {
+      alert('Please select at least one service to upload to.');
+      fileInput.value = ''; // Reset
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64Data = reader.result;
+      
+      // Send to background
+      chrome.runtime.sendMessage({
+        type: 'BROADCAST_FILE_UPLOAD',
+        fileData: {
+          name: file.name,
+          type: file.type,
+          dataBase64: base64Data
+        },
+        targets: [...state.targets]
+      });
+      
+      // Clear input so same file can be selected again if needed
+      fileInput.value = '';
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // Discuss button handler - extracts responses from all services and sends cross-analysis prompts
+  discussButton          && (discussButton.onclick          = async () => {
+    if (state.targets.size < 2) {
+      alert('Discuss requires at least 2 services selected.');
+      return;
+    }
+
+    // Get all services with registered tabs
+    const servicesWithTabs = [...state.targets].filter(svc =>
+      state.serviceStatuses[svc]?.tabs?.length > 0
+    );
+
+    if (servicesWithTabs.length < 2) {
+      alert('Need at least 2 services with registered tabs to discuss.');
+      return;
+    }
+
+    // Extract responses from all services via background script
+    discussButton.disabled = true;
+    discussButton.textContent = 'Extracting...';
+
+    try {
+      console.log('[AIMultiChat DISCUSS] Sending EXTRACT_ALL_RESPONSES from popup');
+      const responses = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({
+          type: 'EXTRACT_ALL_RESPONSES',
+          targets: servicesWithTabs
+        }, (result) => {
+          console.log('[AIMultiChat DISCUSS] Popup received callback, lastError:', chrome.runtime.lastError, 'result:', result);
+          if (chrome.runtime.lastError) {
+            reject(chrome.runtime.lastError);
+          } else {
+            resolve(result);
+          }
+        });
+      });
+      console.log('[AIMultiChat DISCUSS] Popup got responses:', responses);
+
+      if (!responses || Object.keys(responses).length < 2) {
+        alert('Could not extract responses from enough services.');
+        return;
+      }
+
+      // Now send each service the responses from OTHER services
+      discussButton.textContent = 'Sending...';
+
+      for (const targetService of servicesWithTabs) {
+        // Build the prompt with responses from other services
+        const otherResponses = Object.entries(responses)
+          .filter(([svc]) => svc !== targetService)
+          .map(([svc, data]) => {
+            const label = data.label || svc;
+            return `${label}'s Response:\n"""\n${data.response}\n"""`;
+          })
+          .join('\n\n');
+
+        if (!otherResponses) continue;
+
+        const discussPrompt = `Here are the perspectives on the same issue from other LLMs. Tell me what you think compared to your own analysis, taking the strengths and discarding the weaknesses of their and your approach. Synthesize the strengths of all.\n\n${otherResponses}`;
+
+        // Mark as pending
+        state.serviceStatuses[targetService] = state.serviceStatuses[targetService] || { tabs: [], status: 'idle' };
+        state.serviceStatuses[targetService].status = 'pending';
+      }
+
+      renderStatusTable();
+
+      // Send the discuss prompts via broadcast
+      chrome.runtime.sendMessage({
+        type: 'DISCUSS_BROADCAST',
+        responses,
+        targets: servicesWithTabs
+      });
+
+    } catch (error) {
+      console.error('Discuss error:', error);
+      alert('Error during discuss: ' + error.message);
+    } finally {
+      discussButton.disabled = false;
+      discussButton.textContent = 'Discuss';
+    }
   });
   function debounce(func, wait) {
     let timeout;

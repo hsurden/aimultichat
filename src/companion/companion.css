@@ -39,6 +39,10 @@ body {
     user-select: none;
 }
 
+.retile-button{
+    max-height: 30px;
+}
+
 #toggle-button {
     background: none;
     border: 1px solid #ccc;

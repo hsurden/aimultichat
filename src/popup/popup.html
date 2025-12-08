@@ -46,7 +46,10 @@
 
   <!-- Debug Panel -->
   <div class="debug-actions">
-    <button id="retile-windows" title="Restore the tiled layout after minimizing windows">Retile</button>
+    <button id="retile-windows" class="debug-action-button" title="Restore the tiled layout after minimizing windows">Re-tile</button>
+    <button id="discuss-button" class="debug-action-button" title="Trigger the discussion helper">Discuss</button>
+    <button id="upload-button" class="debug-action-button" title="Upload a file to all selected services">Upload File</button>
+    <input type="file" id="file-upload-input" style="display: none;">
   </div>
   <details id="debugPanel" style="margin-top: 10px;">
     <summary style="cursor: pointer; font-weight: bold; color: #666;">🔍 Debug Information</summary>

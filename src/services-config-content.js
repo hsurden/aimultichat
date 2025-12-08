@@ -18,6 +18,10 @@ const DEFAULT_SERVICES = {
       'button[data-testid="send-button"]',
       'button[aria-label="Send message"]'
     ],
+    responseSelectors: [
+      'div[data-message-author-role="assistant"]',
+      'div.markdown.prose'
+    ],
     useEnter: true
   },
   claude: {
@@ -31,6 +35,11 @@ const DEFAULT_SERVICES = {
     sendButtonSelectors: [
       'button:has(svg[data-testid="SendIcon"])',
       'button[aria-label*="Send"]'
+    ],
+    responseSelectors: [
+      'div[data-is-streaming="false"]',
+      'div.font-claude-message',
+      'div[class*="prose"]'
     ],
     useEnter: false // Changed from true to false
   },
@@ -51,6 +60,11 @@ const DEFAULT_SERVICES = {
       '.send-button-container button.submit',
       'button[aria-label="Send message"]'
     ],
+    responseSelectors: [
+      'message-content',
+      'model-response',
+      'div.response-container'
+    ],
     useEnter: true,
     preFocus: true
   },
@@ -70,6 +84,10 @@ const DEFAULT_SERVICES = {
       'button:has(svg)',
       '.send-button'
     ],
+    responseSelectors: [
+      'div.prose',
+      'div[class*="answer"]'
+    ],
     useEnter: true,
     preFocus: true
   },
@@ -87,6 +105,10 @@ const DEFAULT_SERVICES = {
       'button[type="submit"]',
       'button:has(svg)',
       '.send-button'
+    ],
+    responseSelectors: [
+      'div.markdown-body',
+      'div[class*="message-content"]'
     ],
     useEnter: true
   },
@@ -107,6 +129,10 @@ const DEFAULT_SERVICES = {
       'button:has(svg)',
       '.send-button'
     ],
+    responseSelectors: [
+      'div[class*="message"]',
+      'div.prose'
+    ],
     useEnter: true
   },
   zai: {
@@ -125,6 +151,10 @@ const DEFAULT_SERVICES = {
       'button:has(svg)',
       '.sendMessageButton'
     ],
+    responseSelectors: [
+      'div[class*="message"]',
+      'div.prose'
+    ],
     useEnter: true
   },
   qwen: {
@@ -142,6 +172,10 @@ const DEFAULT_SERVICES = {
       'button[aria-label*="Send"]',
       'button:has(svg)',
       '.send-button'
+    ],
+    responseSelectors: [
+      'div[class*="message"]',
+      'div.prose'
     ],
     useEnter: true
   },
@@ -163,6 +197,10 @@ const DEFAULT_SERVICES = {
     'button[aria-label*="Send"]',
     'button:has(svg)',
     '.send-button'
+  ],
+  responseSelectors: [
+    'div[class*="message"]',
+    'div.prose'
   ],
   useEnter: true
 },

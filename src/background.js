@@ -90,7 +90,7 @@ function getRenderedTextFromDocument() {
     // Helper function to detect header-like text patterns
     function isLikelyHeaderText(textChunk, position = 'unknown') {
         const textLower = textChunk.toLowerCase();
-        
+
         // Clear header indicators
         if (textLower.includes('skip to') ||
             textLower.includes('skip navigation') ||
@@ -103,14 +103,14 @@ function getRenderedTextFromDocument() {
             textLower.includes('main menu')) {
             return true;
         }
-        
+
         // NYTimes specific patterns
         if (textLower.includes('u.s.international') ||
             textLower.includes('give the times') ||
             textLower.match(/skip to content.*search/i)) {
             return true;
         }
-        
+
         // If it's at the beginning and has lots of navigation words (more restrictive)
         if (position === 'beginning') {
             const navWords = ['home', 'news', 'sports', 'business', 'politics', 'world', 'opinion', 'search', 'subscribe', 'login', 'account'];
@@ -120,7 +120,7 @@ function getRenderedTextFromDocument() {
                 return true;
             }
         }
-        
+
         return false;
     }
 
@@ -129,7 +129,7 @@ function getRenderedTextFromDocument() {
         const textLower = textChunk.toLowerCase();
 
         console.log('[AIMultiChat] Checking footer text:', "position ", position, "text: ", textLower.substring(0, 100));
-        
+
         // Clear footer indicators
         if (textLower.includes('copyright') ||
             textLower.includes('contact us') ||
@@ -142,7 +142,7 @@ function getRenderedTextFromDocument() {
             textLower.match(/\d{4}.*all rights/)) {
             return true;
         }
-        
+
         // If it's at the end and has lots of footer-like links (more restrictive)
         if (position === 'end') {
             const footerWords = ['contact', 'about', 'careers', 'terms', 'privacy', 'help', 'support', 'legal'];
@@ -152,19 +152,19 @@ function getRenderedTextFromDocument() {
                 return true;
             }
         }
-        
+
         return false;
     }
 
     // First try to get basic text content to ensure we get something
     let text = document.body ? document.body.innerText || document.body.textContent || '' : '';
-    
+
     try {
         // Split text into paragraphs for gentler filtering
         let lines = text.split('\n').filter(line => line.trim().length > 0);
-        
+
         console.log('[AIMultiChat] Original lines:', lines.length);
-        
+
         // Filter out header-like content at the beginning (more conservative)
         let startIndex = 0;
         let consecutiveHeaderLines = 0;
@@ -182,13 +182,13 @@ function getRenderedTextFromDocument() {
                 break;
             }
         }
-        
+
         // Safety check - don't remove more than 80% of content
         if (startIndex > lines.length * 0.8) {
             console.log('[AIMultiChat] Header filtering too aggressive, resetting startIndex from', startIndex, 'to 0');
             startIndex = 0;
         }
-        
+
         // Filter out footer-like content at the end by deleting as detected
         for (let i = lines.length - 1; i >= Math.max(0, lines.length - 25); i--) {  // Check last 25 lines max
             if (isLikelyFooterText(lines[i], 'end')) {
@@ -200,13 +200,13 @@ function getRenderedTextFromDocument() {
                 break;
             }
         }
-        
+
         // Keep only the content after header
         lines = lines.slice(startIndex);
         text = lines.join('\n');
-        
+
         console.log('[AIMultiChat] After line filtering:', lines.length, 'lines remaining');
-        
+
         // Apply regex-based cleanup for remaining header/nav patterns
         text = text
             .replace(/window\.\w+.*$/gm, '')
@@ -259,54 +259,54 @@ chrome.runtime.onInstalled.addListener(async (details) => {
             await chrome.action.setPinnedState(true);
         }
     }
-    
+
 });
 
 chrome.windows.onRemoved.addListener((closedWindowId) => {
-  if (closedWindowId === popupWindowId) {
-    popupWindowId = null;
-    // If popup closed and we had tiled windows, notify tiling mode ended
-    if (tiledWindowIds.size > 0) {
-      chrome.runtime.sendMessage({ type: 'TILING_MODE_ENDED' });
+    if (closedWindowId === popupWindowId) {
+        popupWindowId = null;
+        // If popup closed and we had tiled windows, notify tiling mode ended
+        if (tiledWindowIds.size > 0) {
+            chrome.runtime.sendMessage({ type: 'TILING_MODE_ENDED' });
+        }
     }
-  }
-  if (tiledWindowIds.has(closedWindowId)) {
-    tiledWindowIds.delete(closedWindowId);
-    // If all tiled windows are closed, notify tiling mode ended
-    if (tiledWindowIds.size === 0) {
-      chrome.runtime.sendMessage({ type: 'TILING_MODE_ENDED' });
+    if (tiledWindowIds.has(closedWindowId)) {
+        tiledWindowIds.delete(closedWindowId);
+        // If all tiled windows are closed, notify tiling mode ended
+        if (tiledWindowIds.size === 0) {
+            chrome.runtime.sendMessage({ type: 'TILING_MODE_ENDED' });
+        }
     }
-  }
-  // If either the companion or its control panel is closed, stop the mode.
-  if (closedWindowId === companionState.companionWindowId || closedWindowId === companionState.controlPanelWindowId) {
-    stopCompanionMode();
-  }
+    // If either the companion or its control panel is closed, stop the mode.
+    if (closedWindowId === companionState.companionWindowId || closedWindowId === companionState.controlPanelWindowId) {
+        stopCompanionMode();
+    }
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
-  //console.log(`[BG DEBUG] Tab ${tabId} was closed`);
-  let changed = false;
-  let removedFrom = [];
-  
-  Object.keys(serviceTabs).forEach(s => {
-    if (serviceTabs[s] && serviceTabs[s].has(tabId)) {
-      serviceTabs[s].delete(tabId);
-      removedFrom.push(s);
-      if (serviceTabs[s].size === 0) {
-        delete serviceTabs[s];
-        console.log(`[BG DEBUG] Service ${s} has no tabs left after tab closure, removing service`);
-      }
-      changed = true;
+    //console.log(`[BG DEBUG] Tab ${tabId} was closed`);
+    let changed = false;
+    let removedFrom = [];
+
+    Object.keys(serviceTabs).forEach(s => {
+        if (serviceTabs[s] && serviceTabs[s].has(tabId)) {
+            serviceTabs[s].delete(tabId);
+            removedFrom.push(s);
+            if (serviceTabs[s].size === 0) {
+                delete serviceTabs[s];
+                console.log(`[BG DEBUG] Service ${s} has no tabs left after tab closure, removing service`);
+            }
+            changed = true;
+        }
+    });
+
+    if (removedFrom.length > 0) {
+        console.log(`[BG DEBUG] Closed tab ${tabId} was registered for services: ${removedFrom.join(', ')}`);
     }
-  });
-  
-  if (removedFrom.length > 0) {
-    console.log(`[BG DEBUG] Closed tab ${tabId} was registered for services: ${removedFrom.join(', ')}`);
-  }
-  
-  if (changed) {
-    broadcastStatusUpdate();
-  }
+
+    if (changed) {
+        broadcastStatusUpdate();
+    }
 });
 
 // --- Tab Glow Functions ---
@@ -342,7 +342,7 @@ function disableTabGlow(tabId) {
 // Schedules a series of caching operations to capture dynamically loaded content.
 function scheduleCompanionCaching(tabId, isNewNavigation = false) {
     console.log('[COMPANION TRACE] scheduleCompanionCaching called:', tabId, 'isNewNavigation:', isNewNavigation, 'lastActiveTabId:', companionState.lastActiveTabId, 'companionWindowId:', companionState.companionWindowId);
-    
+
     const cacheIfActive = () => {
         // Only cache if companion mode is active and it's still the same tab.
         console.log('[COMPANION TRACE] cacheIfActive check - companionWindowId:', companionState.companionWindowId, 'tabId:', tabId, 'lastActiveTabId:', companionState.lastActiveTabId);
@@ -408,7 +408,7 @@ async function activateCompanionForTab(tabId) {
             disableTabGlow(companionState.lastActiveTabId);
         }
     }
-    
+
     companionState.lastActiveTabId = tabId;
     console.log('[COMPANION TRACE] Updated lastActiveTabId to:', tabId);
 
@@ -419,7 +419,7 @@ async function activateCompanionForTab(tabId) {
             files: ['src/content/tab-glow.js'],
         });
         console.log('[COMPANION TRACE] Tab glow script injected successfully for tab:', tabId);
-        
+
         // Enable the glow effect
         enableTabGlow(tabId);
     } catch (e) {
@@ -494,12 +494,12 @@ chrome.webNavigation.onCompleted.addListener(async (details) => {
             scheduleCompanionCaching(details.tabId, true);
         }
     }
-    
+
     // Check if tab navigated to an AI service and trigger re-registration
     if (details.frameId === 0) {
         try {
             const hostname = new URL(details.url).hostname.replace(/^www\./, '');
-            
+
             // Check if the new URL matches any AI service
             for (const serviceKey of Object.keys(SERVICES)) {
                 if (SERVICES[serviceKey].match.test(hostname)) {
@@ -534,13 +534,13 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
             companionState.cachedPageUrl = null;
         }
     }
-    
+
     // Check if tab is navigating away from an AI service
     if (details.frameId === 0) {
         try {
             const hostname = new URL(details.url).hostname.replace(/^www\./, '');
             let isAIService = false;
-            
+
             // Check if the new URL matches any AI service
             for (const serviceKey of Object.keys(SERVICES)) {
                 if (SERVICES[serviceKey].match.test(hostname)) {
@@ -548,7 +548,7 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
                     break;
                 }
             }
-            
+
             // If navigating away from AI service, clean up service registration
             if (!isAIService) {
                 let changed = false;
@@ -603,20 +603,20 @@ function getDisplayForWindow(windowInfo, displays) {
 }
 
 function createPopupWindow(windowConfig = {}) {
-  const defaults = { width: 420, height: 320 };
-  chrome.system.display.getInfo((displays) => {
-    if (chrome.runtime.lastError) { console.error(chrome.runtime.lastError); return; }
-    const display = displays[0].workArea;
-    const margin = 20;
-    const url = windowConfig.url || 'src/popup/popup.html';
-    const left = windowConfig.left ?? (display.left + display.width - (windowConfig.width ?? defaults.width) - margin);
-    const top = windowConfig.top ?? (display.top + display.height - (windowConfig.height ?? defaults.height) - margin);
-    const width = windowConfig.width ?? defaults.width;
-    const height = windowConfig.height ?? defaults.height;
-    chrome.windows.create({ url, type: 'popup', width, height, left, top }, (win) => {
-      popupWindowId = win.id;
+    const defaults = { width: 420, height: 320 };
+    chrome.system.display.getInfo((displays) => {
+        if (chrome.runtime.lastError) { console.error(chrome.runtime.lastError); return; }
+        const display = displays[0].workArea;
+        const margin = 20;
+        const url = windowConfig.url || 'src/popup/popup.html';
+        const left = windowConfig.left ?? (display.left + display.width - (windowConfig.width ?? defaults.width) - margin);
+        const top = windowConfig.top ?? (display.top + display.height - (windowConfig.height ?? defaults.height) - margin);
+        const width = windowConfig.width ?? defaults.width;
+        const height = windowConfig.height ?? defaults.height;
+        chrome.windows.create({ url, type: 'popup', width, height, left, top }, (win) => {
+            popupWindowId = win.id;
+        });
     });
-  });
 }
 
 
@@ -624,281 +624,402 @@ function createPopupWindow(windowConfig = {}) {
 // --- Core Functionality ---
 
 function broadcastStatusUpdate() {
-  chrome.storage.local.get('lastPromptText', (data) => {
-    const allServicesStatus = {};
-    for (const key of Object.keys(SERVICES)) { allServicesStatus[key] = []; }
-    for (const [service, tabSet] of Object.entries(serviceTabs)) { allServicesStatus[service] = [...tabSet]; }
-    const status = { services: allServicesStatus, lastPrompt: data.lastPromptText || "" };
-    chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status }, () => {
-      if (chrome.runtime.lastError) { /* Popup not open, ignore */ }
+    chrome.storage.local.get('lastPromptText', (data) => {
+        const allServicesStatus = {};
+        for (const key of Object.keys(SERVICES)) { allServicesStatus[key] = []; }
+        for (const [service, tabSet] of Object.entries(serviceTabs)) { allServicesStatus[service] = [...tabSet]; }
+        const status = { services: allServicesStatus, lastPrompt: data.lastPromptText || "" };
+        chrome.runtime.sendMessage({ type: 'STATUS_UPDATE', status }, () => {
+            if (chrome.runtime.lastError) { /* Popup not open, ignore */ }
+        });
     });
-  });
 }
 
 function registerServiceTab(service, tabId) {
-  //console.log(`[BG DEBUG] Registering tab ${tabId} for service: ${service}`);
-  if (!serviceTabs[service]) { 
-    serviceTabs[service] = new Set(); 
-    console.log(`[BG DEBUG] Created new service entry for: ${service}`);
-  }
-  
-  const wasAlreadyRegistered = serviceTabs[service].has(tabId);
-  serviceTabs[service].add(tabId);
-  
-  if (wasAlreadyRegistered) {
-    console.log(`[BG DEBUG] Tab ${tabId} was already registered for ${service} (re-registration)`);
-  } else {
-    console.log(`[BG DEBUG] Successfully registered new tab ${tabId} for ${service}`);
-  }
-  
-  console.log(`[BG DEBUG] Service ${service} now has ${serviceTabs[service].size} tabs: [${[...serviceTabs[service]].join(', ')}]`);
-  broadcastStatusUpdate();
+    //console.log(`[BG DEBUG] Registering tab ${tabId} for service: ${service}`);
+    if (!serviceTabs[service]) {
+        serviceTabs[service] = new Set();
+        console.log(`[BG DEBUG] Created new service entry for: ${service}`);
+    }
+
+    const wasAlreadyRegistered = serviceTabs[service].has(tabId);
+    serviceTabs[service].add(tabId);
+
+    if (wasAlreadyRegistered) {
+        console.log(`[BG DEBUG] Tab ${tabId} was already registered for ${service} (re-registration)`);
+    } else {
+        console.log(`[BG DEBUG] Successfully registered new tab ${tabId} for ${service}`);
+    }
+
+    console.log(`[BG DEBUG] Service ${service} now has ${serviceTabs[service].size} tabs: [${[...serviceTabs[service]].join(', ')}]`);
+    broadcastStatusUpdate();
 }
 
-chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
-  switch (msg.type) {
-    case 'REGISTER_SERVICE':
-      if (sender.tab && msg.service) {
-        console.log('[COMPANION TRACE] Service registered:', msg.service, 'for tab:', sender.tab.id, 'companionTabId:', companionState.companionTabId);
-        registerServiceTab(msg.service, sender.tab.id);
-        if (companionState.companionTabId === sender.tab.id && companionState.lastActiveTabId && companionState.copyContext) {
-            console.log('[COMPANION TRACE] Companion tab registered, scheduling caching for lastActiveTabId:', companionState.lastActiveTabId);
-            scheduleCompanionCaching(companionState.lastActiveTabId);
+// Separate non-async listener for discuss feature (async listeners can't use sendResponse properly)
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+    if (msg.type === 'EXTRACT_ALL_RESPONSES') {
+        console.log('[AIMultiChat DISCUSS] EXTRACT_ALL_RESPONSES received, targets:', msg.targets);
+        console.log('[AIMultiChat DISCUSS] Current serviceTabs:', JSON.stringify(serviceTabs));
+
+        const responses = {};
+
+        if (!msg.targets || msg.targets.length === 0) {
+            console.log('[AIMultiChat DISCUSS] No targets, sending empty response');
+            sendResponse(responses);
+            return false;
         }
-        sendResponse({ ok: true });
-      }
-      break;
-    case 'REQUEST_STATUS':
-      broadcastStatusUpdate();
-      break;
-    case 'BROADCAST_PROMPT':
-      chrome.storage.local.set({ lastPromptText: msg.text });
-      broadcastPrompt(msg.text, msg.targets, 'INJECT_AND_SEND');
-      sendResponse({ ok: true });
-      break;
-    case 'SYNC_PROMPT_TEXT':
-      chrome.storage.local.set({ currentPromptText: msg.text });
-      broadcastPrompt(msg.text, msg.targets, 'INJECT_TEXT_REALTIME');
-      break;
-    case 'REPLAY_LAST':
-      chrome.storage.local.get('lastPromptText', (data) => {
-        if (data.lastPromptText) {
-          broadcastPrompt(data.lastPromptText, msg.targets, 'INJECT_AND_SEND');
-          sendResponse({ ok: true });
-        } else {
-          sendResponse({ ok: false, error: "No last prompt" });
-        }
-      });
-      return true;
-    case 'SERVICE_FEEDBACK':
-      chrome.runtime.sendMessage({ type: 'SERVICE_FEEDBACK', service: msg.service, tabId: sender.tab?.id, status: msg.status, error: msg.error || null });
-      break;
-    case 'OPEN_SERVICES':
-      if (msg.targets && msg.targets.length > 0) {
-        if (msg.shouldTile && msg.isBottomLayout) { tileWindowsBottom(msg.targets); }
-        else if (msg.shouldTile) { tileWindowsVertical(msg.targets); }
-        else { openTabsInWindow(msg.targets); }
-      }
-      break;
-    case 'START_COMPANION_MODE':
-        startCompanionMode(msg.service);
-        break;
-    case 'REQUEST_PAGE_CONTENT':
-        getFullPageContentFromActiveTab();
-        break;
-    case 'SELECTION_CONTEXT_UPDATE':
-        if (companionState.companionWindowId && sender.tab?.id === companionState.lastActiveTabId) {
-            cachePageContentForCompanion(sender.tab.id, msg.text);
-        }
-        break;
-    case 'UPDATE_COMPANION_SETTINGS':
-        if (msg.settings) {
-            console.log('[COMPANION TRACE] Updating companion settings:', msg.settings, 'lastActiveTabId:', companionState.lastActiveTabId);
-            Object.assign(companionState, msg.settings);
-            chrome.storage.local.set({ companionSettings: msg.settings });
-            if (msg.settings.copyContext && companionState.lastActiveTabId) {
-                console.log('[COMPANION TRACE] copyContext enabled, scheduling caching for lastActiveTabId:', companionState.lastActiveTabId);
-                scheduleCompanionCaching(companionState.lastActiveTabId);
-            } else if (!msg.settings.copyContext) {
-                console.log('[COMPANION TRACE] copyContext disabled, clearing cached content');
-                companionState.cachedPageContent = null;
-                companionState.cachedPageUrl = null;
+
+        let pending = 0;
+        let completed = 0;
+
+        for (const service of msg.targets) {
+            const tabSet = serviceTabs[service];
+            const tabs = tabSet ? Array.from(tabSet) : [];
+            console.log(`[AIMultiChat DISCUSS] Service ${service} has tabs:`, tabs);
+
+            if (tabs.length > 0) {
+                pending++;
+                const tabId = tabs[0];
+                console.log(`[AIMultiChat DISCUSS] Sending EXTRACT_RESPONSE to ${service} tab ${tabId}`);
+
+                chrome.tabs.sendMessage(tabId, {
+                    type: 'EXTRACT_RESPONSE',
+                    service: service
+                }, (response) => {
+                    completed++;
+                    if (chrome.runtime.lastError) {
+                        console.log(`[AIMultiChat DISCUSS] Error extracting from ${service}:`, chrome.runtime.lastError.message);
+                    } else if (response && response.success) {
+                        console.log(`[AIMultiChat DISCUSS] Got response from ${service}:`, response.response?.substring(0, 100));
+                        responses[service] = {
+                            label: response.label,
+                            response: response.response
+                        };
+                    } else {
+                        console.log(`[AIMultiChat DISCUSS] No/invalid response from ${service}:`, response);
+                    }
+
+                    if (completed === pending) {
+                        console.log('[AIMultiChat DISCUSS] All responses collected:', Object.keys(responses));
+                        sendResponse(responses);
+                    }
+                });
             }
         }
-        break;
-    case 'SWITCH_COMPANION_SERVICE':
-        if (msg.service && companionState.companionWindowId) {
-            // Switch the companion to a different service
-            switchCompanionService(msg.service);
+
+        if (pending === 0) {
+            console.log('[AIMultiChat DISCUSS] No pending requests');
+            sendResponse(responses);
+            return false;
         }
-        break;
-    case 'START_MODE':
-        if (msg.mode) {
-            handleModeStart(msg.mode);
+
+        return true; // Keep channel open for async response
+    }
+
+    if (msg.type === 'DISCUSS_BROADCAST') {
+        if (msg.responses && msg.targets && msg.targets.length > 0) {
+            for (const targetService of msg.targets) {
+                const tabSet = serviceTabs[targetService];
+                const tabs = tabSet ? Array.from(tabSet) : [];
+                if (tabs.length === 0) continue;
+
+                const otherResponses = Object.entries(msg.responses)
+                    .filter(([svc]) => svc !== targetService)
+                    .map(([svc, data]) => {
+                        const label = data.label || svc;
+                        return `${label}'s Response:\n"""\n${data.response}\n"""`;
+                    })
+                    .join('\n\n');
+
+                if (!otherResponses) continue;
+
+                const discussPrompt = `Here are the perspectives on the same issue from other LLMs. Tell me what you think compared to your own analysis, taking the strengths and discarding the weaknesses of their and your approach. Synthesize the strengths of all.\n\n${otherResponses}`;
+
+                for (const tabId of tabs) {
+                    chrome.tabs.sendMessage(tabId, {
+                        type: 'INJECT_AND_SEND',
+                        service: targetService,
+                        text: discussPrompt
+                    }, () => {
+                        if (chrome.runtime.lastError) {
+                            console.log(`[AIMultiChat] Error sending discuss to ${targetService}:`, chrome.runtime.lastError.message);
+                        }
+                    });
+                }
+            }
             sendResponse({ ok: true });
-        } else {
-            sendResponse({ ok: false, error: "No mode specified" });
         }
-        break;
-    case 'RETILE_BOTTOM_WINDOWS':
-        if (msg.targets && msg.targets.length > 0) {
-            // Close existing tiled windows and create new ones with updated services
-            tileWindowsBottom(msg.targets);
-        }
-        break;
-    case 'GET_CACHED_CONTENT':
-        // Return cached page content for companion mode
-        console.log('[AIMultiChat DEBUG] GET_CACHED_CONTENT request received');
-        console.log('[AIMultiChat DEBUG] Cached content length:', companionState.cachedPageContent ? companionState.cachedPageContent.length : 'null');
-        console.log('[AIMultiChat DEBUG] Cached URL:', companionState.cachedPageUrl);
-        
-        sendResponse({
-            content: companionState.cachedPageContent,
-            url: companionState.cachedPageUrl
-        });
-        break;
-    case 'REFRESH_PAGE_CONTENT':
-        // Manual refresh of page content for companion mode
-        if (companionState.companionWindowId && companionState.lastActiveTabId) {
-            console.log('[AIMultiChat] Manual refresh requested for tab:', companionState.lastActiveTabId);
-            scheduleCompanionCaching(companionState.lastActiveTabId);
-            sendResponse({ success: true });
-        } else {
-            sendResponse({ success: false, error: 'No active tab to refresh' });
-        }
-        break;
-    case 'AUTO_RETILE':
-        if (msg.targets && msg.targets.length > 0) {
-            if (msg.layout === 'bottom') {
+        return false;
+    }
+
+    // Not handled by this listener
+    return false;
+});
+
+chrome.runtime.onMessage.addListener(async (msg, sender, sendResponse) => {
+    // These are handled by the non-async listener above
+    if (msg.type === 'EXTRACT_ALL_RESPONSES' || msg.type === 'DISCUSS_BROADCAST') {
+        return false;
+    }
+
+    switch (msg.type) {
+        case 'REGISTER_SERVICE':
+            if (sender.tab && msg.service) {
+                console.log('[COMPANION TRACE] Service registered:', msg.service, 'for tab:', sender.tab.id, 'companionTabId:', companionState.companionTabId);
+                registerServiceTab(msg.service, sender.tab.id);
+                if (companionState.companionTabId === sender.tab.id && companionState.lastActiveTabId && companionState.copyContext) {
+                    console.log('[COMPANION TRACE] Companion tab registered, scheduling caching for lastActiveTabId:', companionState.lastActiveTabId);
+                    scheduleCompanionCaching(companionState.lastActiveTabId);
+                }
+                sendResponse({ ok: true });
+            }
+            break;
+        case 'REQUEST_STATUS':
+            broadcastStatusUpdate();
+            break;
+        case 'BROADCAST_PROMPT':
+            chrome.storage.local.set({ lastPromptText: msg.text });
+            broadcastPrompt(msg.text, msg.targets, 'INJECT_AND_SEND');
+            sendResponse({ ok: true });
+            break;
+        case 'BROADCAST_FILE_UPLOAD':
+            if (msg.fileData && msg.targets) {
+                for (const service of msg.targets) {
+                    const tabSet = serviceTabs[service];
+                    if (!tabSet) continue;
+                    for (const tabId of tabSet) {
+                        chrome.tabs.sendMessage(tabId, {
+                            type: 'UPLOAD_FILE',
+                            service: service,
+                            fileData: msg.fileData
+                        });
+                    }
+                }
+            }
+            break;
+        case 'SYNC_PROMPT_TEXT':
+            chrome.storage.local.set({ currentPromptText: msg.text });
+            broadcastPrompt(msg.text, msg.targets, 'INJECT_TEXT_REALTIME');
+            break;
+        case 'REPLAY_LAST':
+            chrome.storage.local.get('lastPromptText', (data) => {
+                if (data.lastPromptText) {
+                    broadcastPrompt(data.lastPromptText, msg.targets, 'INJECT_AND_SEND');
+                    sendResponse({ ok: true });
+                } else {
+                    sendResponse({ ok: false, error: "No last prompt" });
+                }
+            });
+            return true;
+        case 'SERVICE_FEEDBACK':
+            chrome.runtime.sendMessage({ type: 'SERVICE_FEEDBACK', service: msg.service, tabId: sender.tab?.id, status: msg.status, error: msg.error || null });
+            break;
+        case 'OPEN_SERVICES':
+            if (msg.targets && msg.targets.length > 0) {
+                if (msg.shouldTile && msg.isBottomLayout) { tileWindowsBottom(msg.targets); }
+                else if (msg.shouldTile) { tileWindowsVertical(msg.targets); }
+                else { openTabsInWindow(msg.targets); }
+            }
+            break;
+        case 'START_COMPANION_MODE':
+            startCompanionMode(msg.service);
+            break;
+        case 'REQUEST_PAGE_CONTENT':
+            getFullPageContentFromActiveTab();
+            break;
+        case 'SELECTION_CONTEXT_UPDATE':
+            if (companionState.companionWindowId && sender.tab?.id === companionState.lastActiveTabId) {
+                cachePageContentForCompanion(sender.tab.id, msg.text);
+            }
+            break;
+        case 'UPDATE_COMPANION_SETTINGS':
+            if (msg.settings) {
+                console.log('[COMPANION TRACE] Updating companion settings:', msg.settings, 'lastActiveTabId:', companionState.lastActiveTabId);
+                Object.assign(companionState, msg.settings);
+                chrome.storage.local.set({ companionSettings: msg.settings });
+                if (msg.settings.copyContext && companionState.lastActiveTabId) {
+                    console.log('[COMPANION TRACE] copyContext enabled, scheduling caching for lastActiveTabId:', companionState.lastActiveTabId);
+                    scheduleCompanionCaching(companionState.lastActiveTabId);
+                } else if (!msg.settings.copyContext) {
+                    console.log('[COMPANION TRACE] copyContext disabled, clearing cached content');
+                    companionState.cachedPageContent = null;
+                    companionState.cachedPageUrl = null;
+                }
+            }
+            break;
+        case 'SWITCH_COMPANION_SERVICE':
+            if (msg.service && companionState.companionWindowId) {
+                // Switch the companion to a different service
+                switchCompanionService(msg.service);
+            }
+            break;
+        case 'START_MODE':
+            if (msg.mode) {
+                handleModeStart(msg.mode);
+                sendResponse({ ok: true });
+            } else {
+                sendResponse({ ok: false, error: "No mode specified" });
+            }
+            break;
+        case 'RETILE_BOTTOM_WINDOWS':
+            if (msg.targets && msg.targets.length > 0) {
+                // Close existing tiled windows and create new ones with updated services
                 tileWindowsBottom(msg.targets);
-            } else if (msg.layout === 'vertical') {
-                tileWindowsVertical(msg.targets);
             }
-        }
-        break;
-    case 'RAISE_AND_RETILE':
-        raiseAndRetileTiledWindows();
-        break;
-    case 'UPDATE_SERVICE_CONFIG':
-        if (msg.serviceKey && msg.config) {
-            // Store the updated config for runtime use
-            // This allows content scripts to use updated configurations
-            await chrome.storage.local.set({
-                [`runtimeServiceConfig_${msg.serviceKey}`]: msg.config
+            break;
+        case 'GET_CACHED_CONTENT':
+            // Return cached page content for companion mode
+            console.log('[AIMultiChat DEBUG] GET_CACHED_CONTENT request received');
+            console.log('[AIMultiChat DEBUG] Cached content length:', companionState.cachedPageContent ? companionState.cachedPageContent.length : 'null');
+            console.log('[AIMultiChat DEBUG] Cached URL:', companionState.cachedPageUrl);
+
+            sendResponse({
+                content: companionState.cachedPageContent,
+                url: companionState.cachedPageUrl
             });
-            
-            // Notify all tabs of the service config update
-            chrome.tabs.query({}, (tabs) => {
-                tabs.forEach(tab => {
-                    if (tab.url && tab.url.startsWith('http')) {
-                        chrome.tabs.sendMessage(tab.id, {
-                            type: 'SERVICE_CONFIG_UPDATED',
-                            serviceKey: msg.serviceKey,
-                            config: msg.config
-                        }, () => {
-                            // Ignore errors for tabs that don't have content script
-                            if (chrome.runtime.lastError) { /* ignore */ }
-                        });
-                    }
-                });
-            });
-        }
-        break;
-    case 'ADD_CUSTOM_SERVICE':
-        if (msg.serviceKey && msg.config) {
-            // Notify all tabs of the new custom service
-            chrome.tabs.query({}, (tabs) => {
-                tabs.forEach(tab => {
-                    if (tab.url && tab.url.startsWith('http')) {
-                        chrome.tabs.sendMessage(tab.id, {
-                            type: 'ADD_CUSTOM_SERVICE',
-                            serviceKey: msg.serviceKey,
-                            config: msg.config
-                        }, () => {
-                            // Ignore errors for tabs that don't have content script
-                            if (chrome.runtime.lastError) { /* ignore */ }
-                        });
-                    }
-                });
-            });
-            
-            // Notify popup of custom services update
-            chrome.runtime.sendMessage({ type: 'CUSTOM_SERVICES_UPDATED' });
-        }
-        break;
-    case 'REMOVE_CUSTOM_SERVICE':
-        if (msg.serviceKey) {
-            // Remove service tabs from tracking
-            if (serviceTabs[msg.serviceKey]) {
-                delete serviceTabs[msg.serviceKey];
-                broadcastStatusUpdate();
+            break;
+        case 'REFRESH_PAGE_CONTENT':
+            // Manual refresh of page content for companion mode
+            if (companionState.companionWindowId && companionState.lastActiveTabId) {
+                console.log('[AIMultiChat] Manual refresh requested for tab:', companionState.lastActiveTabId);
+                scheduleCompanionCaching(companionState.lastActiveTabId);
+                sendResponse({ success: true });
+            } else {
+                sendResponse({ success: false, error: 'No active tab to refresh' });
             }
-            
-            // Notify all tabs of the service removal
-            chrome.tabs.query({}, (tabs) => {
-                tabs.forEach(tab => {
-                    if (tab.url && tab.url.startsWith('http')) {
-                        chrome.tabs.sendMessage(tab.id, {
-                            type: 'REMOVE_CUSTOM_SERVICE',
-                            serviceKey: msg.serviceKey
-                        }, () => {
-                            // Ignore errors for tabs that don't have content script
-                            if (chrome.runtime.lastError) { /* ignore */ }
-                        });
-                    }
+            break;
+        case 'AUTO_RETILE':
+            if (msg.targets && msg.targets.length > 0) {
+                if (msg.layout === 'bottom') {
+                    tileWindowsBottom(msg.targets);
+                } else if (msg.layout === 'vertical') {
+                    tileWindowsVertical(msg.targets);
+                }
+            }
+            break;
+        case 'RAISE_AND_RETILE':
+            raiseAndRetileTiledWindows();
+            break;
+        case 'UPDATE_SERVICE_CONFIG':
+            if (msg.serviceKey && msg.config) {
+                // Store the updated config for runtime use
+                // This allows content scripts to use updated configurations
+                await chrome.storage.local.set({
+                    [`runtimeServiceConfig_${msg.serviceKey}`]: msg.config
                 });
-            });
-            
-            // Notify popup of custom services update
-            chrome.runtime.sendMessage({ type: 'CUSTOM_SERVICES_UPDATED' });
-        }
-        break;
-  }
-  return true;
+
+                // Notify all tabs of the service config update
+                chrome.tabs.query({}, (tabs) => {
+                    tabs.forEach(tab => {
+                        if (tab.url && tab.url.startsWith('http')) {
+                            chrome.tabs.sendMessage(tab.id, {
+                                type: 'SERVICE_CONFIG_UPDATED',
+                                serviceKey: msg.serviceKey,
+                                config: msg.config
+                            }, () => {
+                                // Ignore errors for tabs that don't have content script
+                                if (chrome.runtime.lastError) { /* ignore */ }
+                            });
+                        }
+                    });
+                });
+            }
+            break;
+        case 'ADD_CUSTOM_SERVICE':
+            if (msg.serviceKey && msg.config) {
+                // Notify all tabs of the new custom service
+                chrome.tabs.query({}, (tabs) => {
+                    tabs.forEach(tab => {
+                        if (tab.url && tab.url.startsWith('http')) {
+                            chrome.tabs.sendMessage(tab.id, {
+                                type: 'ADD_CUSTOM_SERVICE',
+                                serviceKey: msg.serviceKey,
+                                config: msg.config
+                            }, () => {
+                                // Ignore errors for tabs that don't have content script
+                                if (chrome.runtime.lastError) { /* ignore */ }
+                            });
+                        }
+                    });
+                });
+
+                // Notify popup of custom services update
+                chrome.runtime.sendMessage({ type: 'CUSTOM_SERVICES_UPDATED' });
+            }
+            break;
+        case 'REMOVE_CUSTOM_SERVICE':
+            if (msg.serviceKey) {
+                // Remove service tabs from tracking
+                if (serviceTabs[msg.serviceKey]) {
+                    delete serviceTabs[msg.serviceKey];
+                    broadcastStatusUpdate();
+                }
+
+                // Notify all tabs of the service removal
+                chrome.tabs.query({}, (tabs) => {
+                    tabs.forEach(tab => {
+                        if (tab.url && tab.url.startsWith('http')) {
+                            chrome.tabs.sendMessage(tab.id, {
+                                type: 'REMOVE_CUSTOM_SERVICE',
+                                serviceKey: msg.serviceKey
+                            }, () => {
+                                // Ignore errors for tabs that don't have content script
+                                if (chrome.runtime.lastError) { /* ignore */ }
+                            });
+                        }
+                    });
+                });
+
+                // Notify popup of custom services update
+                chrome.runtime.sendMessage({ type: 'CUSTOM_SERVICES_UPDATED' });
+            }
+            break;
+    }
+    return true;
 });
 
 function broadcastPrompt(text, targets, messageType) {
-  //console.log('[BG DEBUG] Broadcasting prompt to targets:', targets);
-  //console.log('[BG DEBUG] Current serviceTabs state:', JSON.stringify(serviceTabs));
-  
-  for (const service of targets) {
-    const tabs = serviceTabs[service];
-    //console.log(`[BG DEBUG] Service ${service} has tabs:`, tabs ? [...tabs] : 'none');
-    
-    if (!tabs) {
-      console.log(`[BG DEBUG] No tabs registered for service: ${service}`);
-      continue;
-    }
-    
-    for (const tabId of tabs) {
-      //console.log(`[BG DEBUG] Sending message to tab ${tabId} for service ${service}`);
-      chrome.tabs.sendMessage(tabId, { type: messageType, text, service }, (response) => {
-          if (chrome.runtime.lastError) { 
-     
-            // Send failure feedback to popup
-            chrome.runtime.sendMessage({ 
-              type: 'SERVICE_FEEDBACK', 
-              service: service, 
-              tabId: tabId, 
-              status: 'error', 
-              error: chrome.runtime.lastError.message 
+    //console.log('[BG DEBUG] Broadcasting prompt to targets:', targets);
+    //console.log('[BG DEBUG] Current serviceTabs state:', JSON.stringify(serviceTabs));
+
+    for (const service of targets) {
+        const tabs = serviceTabs[service];
+        //console.log(`[BG DEBUG] Service ${service} has tabs:`, tabs ? [...tabs] : 'none');
+
+        if (!tabs) {
+            console.log(`[BG DEBUG] No tabs registered for service: ${service}`);
+            continue;
+        }
+
+        for (const tabId of tabs) {
+            //console.log(`[BG DEBUG] Sending message to tab ${tabId} for service ${service}`);
+            chrome.tabs.sendMessage(tabId, { type: messageType, text, service }, (response) => {
+                if (chrome.runtime.lastError) {
+
+                    // Send failure feedback to popup
+                    chrome.runtime.sendMessage({
+                        type: 'SERVICE_FEEDBACK',
+                        service: service,
+                        tabId: tabId,
+                        status: 'error',
+                        error: chrome.runtime.lastError.message
+                    });
+                } else {
+                    console.log(`[BG DEBUG] Message sent successfully to tab ${tabId}`);
+                }
             });
-          } else {
-            console.log(`[BG DEBUG] Message sent successfully to tab ${tabId}`);
-          }
-      });
+        }
     }
-  }
 }
 
 chrome.commands.onCommand.addListener(async (command) => {
-  if (command === 'broadcast-last-prompt') {
-    const data = await chrome.storage.local.get('lastPromptText');
-    if (data.lastPromptText) {
-        const targets = Object.keys(serviceTabs);
-        broadcastPrompt(data.lastPromptText, targets, 'INJECT_AND_SEND');
+    if (command === 'broadcast-last-prompt') {
+        const data = await chrome.storage.local.get('lastPromptText');
+        if (data.lastPromptText) {
+            const targets = Object.keys(serviceTabs);
+            broadcastPrompt(data.lastPromptText, targets, 'INJECT_AND_SEND');
+        }
     }
-  }
 });
 
 
@@ -1054,29 +1175,29 @@ async function switchCompanionService(newService) {
     if (!companionState.companionWindowId || companionState.service === newService) {
         return; // No companion mode active or already using this service
     }
-    
+
     console.log('[AIMultiChat] Switching companion service to:', newService);
-    
+
     // Store current state
     const currentTabId = companionState.lastActiveTabId;
     const currentSettings = {
         copyContext: companionState.copyContext,
         isExpanded: companionState.isExpanded
     };
-    
+
     // Get window dimensions for seamless transition
     const companionWindow = await chrome.windows.get(companionState.companionWindowId);
     const controlPanelWindow = await chrome.windows.get(companionState.controlPanelWindowId);
-    
+
     // Stop current companion mode
     await stopCompanionMode();
-    
+
     // Start new companion mode with the new service
     await startCompanionMode(newService);
-    
+
     // Restore settings
     Object.assign(companionState, currentSettings);
-    
+
     // If there was an active tab and copy context is enabled, send its content
     if (currentTabId && currentSettings.copyContext) {
         scheduleCompanionCaching(currentTabId);
@@ -1086,12 +1207,12 @@ async function switchCompanionService(newService) {
 // Helper function to truncate content to approximately 3500 words
 function truncateToWordLimit(text, maxWords = 3500) {
     if (!text) return text;
-    
+
     const words = text.trim().split(/\s+/);
     if (words.length <= maxWords) {
         return text;
     }
-    
+
     const truncated = words.slice(0, maxWords).join(' ');
     return truncated + '\n\n[Content truncated - showing first ' + maxWords + ' words of ' + words.length + ' total words]';
 }
@@ -1114,34 +1235,34 @@ async function cachePageContentForCompanion(tabId, selectedText = null) {
             notifyCompanionPanelOfContentUpdate(null, tab.url);
             return;
         }
-        
+
         console.log('[COMPANION TRACE] Starting content extraction for tab:', tab.url);
-        
+
         const injectionResults = await chrome.scripting.executeScript({
             target: { tabId: tabId, allFrames: true },
             func: getRenderedTextFromDocument,
         });
-        
+
         if (injectionResults && injectionResults.length > 0) {
             let fullText = injectionResults.map(r => r.result).filter(Boolean).join('\n\n---\n\n').trim();
-            
+
             // Apply size limits - truncate to ~3500 words
             fullText = truncateToWordLimit(fullText, 3500);
-            
+
             console.log('[AIMultiChat DEBUG] Cached content length:', fullText.length, 'for:', tab.url);
             console.log('[AIMultiChat DEBUG] Content preview:', fullText.substring(0, 200) + '...');
-            
+
             // Cache the content without sending to companion
             companionState.cachedPageContent = fullText;
             companionState.cachedPageUrl = tab.url;
-            
+
             if (selectedText) {
                 companionState.cachedPageContent = fullText + '\n\nHighlighted text: ' + selectedText;
                 console.log('[AIMultiChat DEBUG] Added selected text to cache');
             }
-            
+
             console.log('[AIMultiChat DEBUG] Final cached content length:', companionState.cachedPageContent.length);
-            
+
             // Notify companion panel of content update
             notifyCompanionPanelOfContentUpdate(companionState.cachedPageContent, tab.url);
         } else {
@@ -1151,7 +1272,7 @@ async function cachePageContentForCompanion(tabId, selectedText = null) {
             // Notify companion panel of content update
             notifyCompanionPanelOfContentUpdate(null, tab.url);
         }
-    } catch (e) { 
+    } catch (e) {
         console.error("[COMPANION TRACE] Error caching page content for tab", tabId, ":", e.message);
         companionState.cachedPageContent = null;
         companionState.cachedPageUrl = null;
@@ -1163,7 +1284,7 @@ async function cachePageContentForCompanion(tabId, selectedText = null) {
 // Helper function to notify companion panel of content updates
 function notifyCompanionPanelOfContentUpdate(content, url) {
     if (!companionState.controlPanelWindowId) return;
-    
+
     chrome.tabs.query({ windowId: companionState.controlPanelWindowId }, (tabs) => {
         if (tabs && tabs.length > 0) {
             // const preview = content ? content.substring(0, 500) + '...' : '';
@@ -1203,26 +1324,26 @@ async function handleModeStart(mode) {
             const defaultService = prefs.defaultCompanionService || 'chatgpt';
             startCompanionMode(defaultService);
             break;
-            
+
         case 'bottom':
             // Start tiled bottom mode
             const bottomPrefs = await chrome.storage.local.get('checkedServices');
             const bottomTargets = bottomPrefs.checkedServices || ['chatgpt', 'claude', 'gemini'];
             tileWindowsBottom(bottomTargets);
             break;
-            
+
         case 'right':
             // Start tiled right mode
             const rightPrefs = await chrome.storage.local.get('checkedServices');
             const rightTargets = rightPrefs.checkedServices || ['chatgpt', 'claude', 'gemini'];
             tileWindowsVertical(rightTargets);
             break;
-            
+
         case 'multi-mode':
             // Open the original advanced popup
             createPopupWindow();
             break;
-            
+
         case 'settings':
             // Open settings page
             createPopupWindow({ url: 'src/popup/settings.html', width: 350, height: 450 });
@@ -1239,64 +1360,64 @@ async function openTabsInWindow(targets) {
 }
 
 async function tileWindowsVertical(servicesToTile) {
-  // Get the currently focused window to determine which screen to use
-  const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
+    // Get the currently focused window to determine which screen to use
+    const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
 
-  chrome.system.display.getInfo(async (displays) => {
-    if (chrome.runtime.lastError) { console.error(chrome.runtime.lastError.message); return; }
+    chrome.system.display.getInfo(async (displays) => {
+        if (chrome.runtime.lastError) { console.error(chrome.runtime.lastError.message); return; }
 
-    // Find the display that contains the current browser window
-    const currentDisplay = lastFocusedWindow ? getDisplayForWindow(lastFocusedWindow, displays) : displays[0];
-    const display = currentDisplay.workArea;
+        // Find the display that contains the current browser window
+        const currentDisplay = lastFocusedWindow ? getDisplayForWindow(lastFocusedWindow, displays) : displays[0];
+        const display = currentDisplay.workArea;
 
-    // Close existing tiled windows first
-    for (const windowId of tiledWindowIds) {
-      try { await chrome.windows.remove(windowId); } catch (e) { /*ignore*/ }
-    }
-    tiledWindowIds.clear();
-
-    // Filter out invalid services - only keep services defined in SERVICES config
-    const filteredServices = servicesToTile.filter(service => {
-        const isValid = typeof service === 'string' &&
-                       service.length > 0 &&
-                       service.length < 50 &&
-                       SERVICES.hasOwnProperty(service);
-        if (!isValid) {
-            console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
+        // Close existing tiled windows first
+        for (const windowId of tiledWindowIds) {
+            try { await chrome.windows.remove(windowId); } catch (e) { /*ignore*/ }
         }
-        return isValid;
+        tiledWindowIds.clear();
+
+        // Filter out invalid services - only keep services defined in SERVICES config
+        const filteredServices = servicesToTile.filter(service => {
+            const isValid = typeof service === 'string' &&
+                service.length > 0 &&
+                service.length < 50 &&
+                SERVICES.hasOwnProperty(service);
+            if (!isValid) {
+                console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
+            }
+            return isValid;
+        });
+
+        if (filteredServices.length === 0) {
+            console.warn('[AIMultiChat] No valid services to tile, using defaults');
+            filteredServices.push('chatgpt', 'claude', 'gemini');
+        }
+
+        const displayId = currentDisplay.id;
+        const screenWidth = display.width, screenHeight = display.height;
+        const popupWidth = Math.floor(screenWidth / VERTICAL_POPUP_DIVISOR);
+        const servicesAreaWidth = screenWidth - popupWidth;
+        const numServices = filteredServices.length;
+        const serviceWindowWidth = numServices > 0 ? Math.floor(servicesAreaWidth / numServices) : 0;
+        if (popupWindowId) { try { await chrome.windows.remove(popupWindowId); } catch (e) { /*ignore*/ } popupWindowId = null; }
+        const layoutState = {
+            layout: 'vertical',
+            services: [...filteredServices],
+            displayId,
+            windows: []
+        };
+
+        for (let i = 0; i < numServices; i++) {
+            const serviceKey = filteredServices[i];
+            const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey), left: display.left + i * serviceWindowWidth, top: display.top, width: serviceWindowWidth, height: screenHeight });
+            if (newWindow) {
+                tiledWindowIds.add(newWindow.id);
+                layoutState.windows.push({ windowId: newWindow.id, serviceKey });
+            }
+        }
+        tiledLayoutState = layoutState;
+        createPopupWindow({ left: display.left + servicesAreaWidth, top: display.top, width: popupWidth, height: screenHeight });
     });
-
-    if (filteredServices.length === 0) {
-        console.warn('[AIMultiChat] No valid services to tile, using defaults');
-        filteredServices.push('chatgpt', 'claude', 'gemini');
-    }
-
-    const displayId = currentDisplay.id;
-    const screenWidth = display.width, screenHeight = display.height;
-    const popupWidth = Math.floor(screenWidth / VERTICAL_POPUP_DIVISOR);
-    const servicesAreaWidth = screenWidth - popupWidth;
-    const numServices = filteredServices.length;
-    const serviceWindowWidth = numServices > 0 ? Math.floor(servicesAreaWidth / numServices) : 0;
-    if (popupWindowId) { try { await chrome.windows.remove(popupWindowId); } catch (e) { /*ignore*/ } popupWindowId = null; }
-    const layoutState = {
-        layout: 'vertical',
-        services: [...filteredServices],
-        displayId,
-        windows: []
-    };
-
-    for (let i = 0; i < numServices; i++) {
-      const serviceKey = filteredServices[i];
-      const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey), left: display.left + i * serviceWindowWidth, top: display.top, width: serviceWindowWidth, height: screenHeight });
-      if (newWindow) {
-          tiledWindowIds.add(newWindow.id);
-          layoutState.windows.push({ windowId: newWindow.id, serviceKey });
-      }
-    }
-    tiledLayoutState = layoutState;
-    createPopupWindow({ left: display.left + servicesAreaWidth, top: display.top, width: popupWidth, height: screenHeight });
-  });
 }
 
 async function tileWindowsBottom(servicesToTile) {
@@ -1320,9 +1441,9 @@ async function tileWindowsBottom(servicesToTile) {
         // Filter out invalid services - only keep services defined in SERVICES config
         const filteredServices = servicesToTile.filter(service => {
             const isValid = typeof service === 'string' &&
-                           service.length > 0 &&
-                           service.length < 50 &&
-                           SERVICES.hasOwnProperty(service);
+                service.length > 0 &&
+                service.length < 50 &&
+                SERVICES.hasOwnProperty(service);
             if (!isValid) {
                 console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
             }
@@ -1467,56 +1588,56 @@ async function raiseAndRetileTiledWindows() {
 }
 
 function getServiceUrl(serviceKey) {
-  // Use SERVICES config to get proper URLs instead of guessing
-  const serviceConfig = SERVICES[serviceKey];
-  if (!serviceConfig) {
-    console.warn(`[AIMultiChat] Unknown service: ${serviceKey}. Falling back to ChatGPT.`);
-    return 'https://chatgpt.com/';
-  }
-  
-  // Extract hostname from the regex pattern and construct URL
-  const match = serviceConfig.match;
-  let hostname;
-  
-  switch (serviceKey) {
-    case 'chatgpt':
-      hostname = 'chatgpt.com';
-      break;
-    case 'claude':
-      hostname = 'claude.ai';
-      return 'https://claude.ai/new'; // Claude needs the /new path
-    case 'gemini':
-      hostname = 'gemini.google.com';
-      return 'https://gemini.google.com/app'; // Gemini needs the /app path
-    case 'perplexity':
-      hostname = 'perplexity.ai';
-      break;
-    case 'deepseek':
-      hostname = 'chat.deepseek.com';
-      break;
-    case 'grok':
-      hostname = 'grok.com';
-      break;
-    case 'zai':
-      hostname = 'chat.z.ai';
-      break;
-    case 'qwen':
-      hostname = 'chat.qwen.ai';
-      break;
-    case 'kimi':
-      hostname = 'kimi.com';
-      break;
-    default:
-      // Try to extract hostname from regex if possible
-      const regexStr = match.toString();
-      const hostMatch = regexStr.match(/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
-      if (hostMatch) {
-        hostname = hostMatch[1].replace(/\\\./g, '.');
-      } else {
-        console.warn(`[AIMultiChat] Could not determine URL for service: ${serviceKey}`);
+    // Use SERVICES config to get proper URLs instead of guessing
+    const serviceConfig = SERVICES[serviceKey];
+    if (!serviceConfig) {
+        console.warn(`[AIMultiChat] Unknown service: ${serviceKey}. Falling back to ChatGPT.`);
         return 'https://chatgpt.com/';
-      }
-  }
-  
-  return `https://${hostname}/`;
+    }
+
+    // Extract hostname from the regex pattern and construct URL
+    const match = serviceConfig.match;
+    let hostname;
+
+    switch (serviceKey) {
+        case 'chatgpt':
+            hostname = 'chatgpt.com';
+            break;
+        case 'claude':
+            hostname = 'claude.ai';
+            return 'https://claude.ai/new'; // Claude needs the /new path
+        case 'gemini':
+            hostname = 'gemini.google.com';
+            return 'https://gemini.google.com/app'; // Gemini needs the /app path
+        case 'perplexity':
+            hostname = 'perplexity.ai';
+            break;
+        case 'deepseek':
+            hostname = 'chat.deepseek.com';
+            break;
+        case 'grok':
+            hostname = 'grok.com';
+            break;
+        case 'zai':
+            hostname = 'chat.z.ai';
+            break;
+        case 'qwen':
+            hostname = 'chat.qwen.ai';
+            break;
+        case 'kimi':
+            hostname = 'kimi.com';
+            break;
+        default:
+            // Try to extract hostname from regex if possible
+            const regexStr = match.toString();
+            const hostMatch = regexStr.match(/([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/);
+            if (hostMatch) {
+                hostname = hostMatch[1].replace(/\\\./g, '.');
+            } else {
+                console.warn(`[AIMultiChat] Could not determine URL for service: ${serviceKey}`);
+                return 'https://chatgpt.com/';
+            }
+    }
+
+    return `https://${hostname}/`;
 }
