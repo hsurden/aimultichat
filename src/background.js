@@ -1566,24 +1566,120 @@ async function raiseAndRetileTiledWindows() {
     tiledLayoutState.displayId = targetDisplay.id;
     const workArea = targetDisplay.workArea;
 
+    // Check each window and rebuild missing ones using existing tabs
+    let needsRebuild = false;
     for (const entry of tiledLayoutState.windows) {
         try {
             await chrome.windows.get(entry.windowId);
         } catch (error) {
-            console.log('[AIMultiChat] Missing tiled window during retile, rebuilding layout');
-            if (tiledLayoutState.layout === 'bottom') {
-                tileWindowsBottom(tiledLayoutState.services);
-            } else if (tiledLayoutState.layout === 'vertical') {
-                tileWindowsVertical(tiledLayoutState.services);
-            }
-            return;
+            console.log(`[AIMultiChat] Window ${entry.windowId} for ${entry.serviceKey} is missing, will rebuild`);
+            needsRebuild = true;
+            break;
         }
+    }
+
+    if (needsRebuild) {
+        // Rebuild layout using existing tabs instead of creating new ones
+        await rebuildTiledLayoutWithExistingTabs(workArea);
+        return;
     }
 
     if (tiledLayoutState.layout === 'bottom') {
         await applyBottomLayout(workArea);
     } else if (tiledLayoutState.layout === 'vertical') {
         await applyVerticalLayout(workArea);
+    }
+}
+
+// Rebuild tiled layout using existing tabs for each service (no page reloads)
+async function rebuildTiledLayoutWithExistingTabs(workArea) {
+    const services = tiledLayoutState.services;
+    const layout = tiledLayoutState.layout;
+
+    // Clear old window tracking
+    tiledWindowIds.clear();
+
+    const newWindows = [];
+
+    for (const serviceKey of services) {
+        // Find an existing tab for this service
+        const tabSet = serviceTabs[serviceKey];
+        const existingTabId = tabSet && tabSet.size > 0 ? [...tabSet][0] : null;
+
+        let windowId;
+
+        if (existingTabId) {
+            try {
+                // Get the tab info to check its current window
+                const tab = await chrome.tabs.get(existingTabId);
+                const tabWindowId = tab.windowId;
+
+                // Check how many tabs are in this window
+                const windowTabs = await chrome.tabs.query({ windowId: tabWindowId });
+
+                if (windowTabs.length === 1) {
+                    // Tab is alone in its window, just reuse this window
+                    windowId = tabWindowId;
+                    console.log(`[AIMultiChat] Reusing existing window ${windowId} for ${serviceKey}`);
+                } else {
+                    // Tab is in a window with other tabs, move it to a new window
+                    const newWindow = await chrome.windows.create({ tabId: existingTabId });
+                    windowId = newWindow.id;
+                    console.log(`[AIMultiChat] Moved tab ${existingTabId} to new window ${windowId} for ${serviceKey}`);
+                }
+            } catch (e) {
+                console.warn(`[AIMultiChat] Error handling tab for ${serviceKey}:`, e);
+                // Fall back to creating a new window with fresh URL
+                const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey) });
+                windowId = newWindow.id;
+            }
+        } else {
+            // No existing tab, create new window with service URL
+            console.log(`[AIMultiChat] No existing tab for ${serviceKey}, creating new window`);
+            const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey) });
+            windowId = newWindow.id;
+        }
+
+        tiledWindowIds.add(windowId);
+        newWindows.push({ windowId, serviceKey });
+    }
+
+    // Update layout state with new windows
+    tiledLayoutState.windows = newWindows;
+
+    // Apply the layout positioning
+    if (layout === 'bottom') {
+        await applyBottomLayout(workArea);
+    } else if (layout === 'vertical') {
+        await applyVerticalLayout(workArea);
+    }
+
+    // Recreate popup window if needed
+    if (popupWindowId) {
+        try {
+            await chrome.windows.get(popupWindowId);
+        } catch (e) {
+            // Popup window is gone, recreate it
+            if (layout === 'bottom') {
+                const bottomPopupHeight = BOTTOM_POPUP_HEIGHT;
+                await createPopupWindow({
+                    url: 'src/popup/popup.html?layout=bottom',
+                    left: workArea.left,
+                    top: workArea.top + workArea.height - bottomPopupHeight,
+                    width: workArea.width,
+                    height: bottomPopupHeight
+                });
+            } else if (layout === 'vertical') {
+                const popupWidth = Math.floor(workArea.width / VERTICAL_POPUP_DIVISOR);
+                const servicesAreaWidth = workArea.width - popupWidth;
+                await createPopupWindow({
+                    left: workArea.left + servicesAreaWidth,
+                    top: workArea.top,
+                    width: popupWidth,
+                    height: workArea.height
+                });
+            }
+        }
     }
 }
 

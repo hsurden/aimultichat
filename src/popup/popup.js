@@ -19,6 +19,9 @@ window.addEventListener('DOMContentLoaded', async () => {
   const openAllButton          = document.getElementById('openAll');
   const retileButton           = document.getElementById('retile-windows');
   const discussButton          = document.getElementById('discuss-button');
+  const imagePreviewContainer  = document.getElementById('image-preview-container');
+  const imagePreview           = document.getElementById('image-preview');
+  const imageRemoveBtn         = document.getElementById('image-remove');
 
   // --- Internal state ---
   const state = {
@@ -29,7 +32,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     currentTileLayout: null, // 'vertical' or 'bottom'
     debugInfo: {}, // Track detailed service/tab debug info
     lastBroadcastTime: null,
-    broadcastHistory: [] // Track recent broadcasts for debugging
+    broadcastHistory: [], // Track recent broadcasts for debugging
+    pendingImage: null // Stores pending image data { name, type, dataBase64 }
   };
 
   // --- Initialize Choices on the <select> (global Choices must already be loaded) ---
@@ -355,6 +359,25 @@ window.addEventListener('DOMContentLoaded', async () => {
       text,
       targets: [...state.targets]
     });
+
+    // Also broadcast pending image if there is one
+    if (state.pendingImage) {
+      chrome.runtime.sendMessage({
+        type: 'BROADCAST_FILE_UPLOAD',
+        fileData: state.pendingImage,
+        targets: [...state.targets]
+      });
+      console.log('[AIMultiChat] Pending image broadcast to services:', [...state.targets]);
+
+      // Clear the pending image after broadcasting
+      state.pendingImage = null;
+      if (imagePreviewContainer) {
+        imagePreviewContainer.style.display = 'none';
+      }
+      if (imagePreview) {
+        imagePreview.src = '';
+      }
+    }
   };
 
   const handleGetContent = async () => {
@@ -468,6 +491,55 @@ window.addEventListener('DOMContentLoaded', async () => {
       fileInput.value = '';
     };
     reader.readAsDataURL(file);
+  });
+
+  // Paste handler for images in the prompt textarea
+  promptEl && promptEl.addEventListener('paste', (e) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault(); // Prevent default paste behavior for images
+
+        const file = item.getAsFile();
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64Data = reader.result;
+
+          // Store the pending image data
+          state.pendingImage = {
+            name: `pasted-image-${Date.now()}.${file.type.split('/')[1] || 'png'}`,
+            type: file.type,
+            dataBase64: base64Data
+          };
+
+          // Show the preview
+          if (imagePreview && imagePreviewContainer) {
+            imagePreview.src = base64Data;
+            imagePreviewContainer.style.display = 'block';
+          }
+
+          console.log('[AIMultiChat] Image pasted and ready to broadcast');
+        };
+        reader.readAsDataURL(file);
+        return; // Only handle the first image
+      }
+    }
+  });
+
+  // Remove button for pasted image
+  imageRemoveBtn && (imageRemoveBtn.onclick = () => {
+    state.pendingImage = null;
+    if (imagePreviewContainer) {
+      imagePreviewContainer.style.display = 'none';
+    }
+    if (imagePreview) {
+      imagePreview.src = '';
+    }
+    console.log('[AIMultiChat] Pasted image removed');
   });
 
   // Discuss button handler - extracts responses from all services and sends cross-analysis prompts
