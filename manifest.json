@@ -34,6 +34,7 @@
       "https://claude.ai/*",
       "https://gemini.google.com/*",
       "https://perplexity.ai/*",
+      "https://www.perplexity.ai/*",
       "https://*.deepseek.com/*",
       "https://grok.com/*",
       "https://grok.x.ai/*",

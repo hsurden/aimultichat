@@ -193,11 +193,26 @@ function loadAIServiceScript(serviceName, serviceConfig) {
     
     function insertPrompt(inputEl, text) {
         if (!inputEl) return;
-        
+
         if (inputEl.isContentEditable) {
-            inputEl.innerHTML = text.replace(/\n/g, '<br>');
+            // Check if this is a Lexical editor (used by Kimi and Perplexity)
+            if (serviceName === 'kimi' || serviceName === 'perplexity') {
+                inputEl.focus();
+                document.execCommand('selectAll', false, null);
+
+                if (!text) {
+                    document.execCommand('delete');
+                } else {
+                    // Replace standard spaces with non-breaking spaces for Lexical
+                    const safeText = text.replace(/ /g, '\u00A0');
+                    document.execCommand('insertText', false, safeText);
+                }
+            } else {
+                inputEl.innerHTML = text.replace(/\n/g, '<br>');
+            }
+
             inputEl.focus();
-            
+
             // Position cursor at end
             const range = document.createRange();
             const sel = window.getSelection();
@@ -209,8 +224,11 @@ function loadAIServiceScript(serviceName, serviceConfig) {
             inputEl.value = text;
             inputEl.focus();
         }
-        
-        inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+
+        // Skip input event for Lexical editors as execCommand handles it
+        if (serviceName !== 'kimi' && serviceName !== 'perplexity') {
+            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+        }
     }
     
     function performSend(inputEl) {

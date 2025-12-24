@@ -187,8 +187,9 @@ function insertPrompt(inputEl, text) {
         }
       }
     } else {
-      if (serviceName === 'kimi') {
-        // FIXED: Kimi (Lexical) handling.
+      if (serviceName === 'kimi' || serviceName === 'perplexity') {
+        // Lexical editor handling (used by Kimi and Perplexity)
+        // Both use data-lexical-editor="true" contenteditable divs
 
         inputEl.focus();
         document.execCommand('selectAll', false, null);
@@ -196,7 +197,7 @@ function insertPrompt(inputEl, text) {
         if (!text) {
           document.execCommand('delete');
         } else {
-          // CHANGE: Replace standard spaces with non-breaking spaces (\u00A0).
+          // Replace standard spaces with non-breaking spaces (\u00A0).
           // This tricks the editor into seeing one continuous "word", bypassing
           // the tokenizer that cuts off input at the first standard space.
           const safeText = text.replace(/ /g, '\u00A0');
@@ -222,8 +223,8 @@ function insertPrompt(inputEl, text) {
       }
     }
 
-    // Kimi handles its own events via execCommand above, so we skip duplicate dispatching
-    if (serviceName !== 'kimi') {
+    // Lexical editors (Kimi/Perplexity) handle their own events via execCommand above, so we skip duplicate dispatching
+    if (serviceName !== 'kimi' && serviceName !== 'perplexity') {
       const inputEvent = new Event('input', { bubbles: true });
       inputEl.dispatchEvent(inputEvent);
     }
@@ -235,7 +236,7 @@ function insertPrompt(inputEl, text) {
     inputEl.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  if (serviceName === 'kimi') {
+  if (serviceName === 'kimi' || serviceName === 'perplexity') {
     console.log('[AI Multi-Chat DEBUG] insertPrompt result', {
       serviceName,
       tagName: inputEl.tagName,
@@ -382,7 +383,7 @@ async function injectAndSend(text) {
   }
   console.log('[AI Multi-Chat DEBUG] injectAndSend found input', { serviceName, tagName: inputEl?.tagName, className: inputEl?.className });
   insertPrompt(inputEl, text);
-  if (serviceName === 'kimi') {
+  if (serviceName === 'kimi' || serviceName === 'perplexity') {
     console.log('[AI Multi-Chat DEBUG] injectAndSend post insert', {
       serviceName,
       textContent: (inputEl.textContent || '').substring(0, 200),
