@@ -1359,6 +1359,77 @@ async function openTabsInWindow(targets) {
     }
 }
 
+function filterTilingServices(servicesToTile) {
+    const filteredServices = (servicesToTile || []).filter(service => {
+        const isValid = typeof service === 'string' &&
+            service.length > 0 &&
+            service.length < 50 &&
+            SERVICES.hasOwnProperty(service);
+        if (!isValid) {
+            console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
+        }
+        return isValid;
+    });
+
+    if (filteredServices.length === 0) {
+        console.warn('[AIMultiChat] No valid services to tile, using defaults');
+        filteredServices.push('chatgpt', 'claude', 'gemini');
+    }
+
+    return filteredServices;
+}
+
+async function retileExistingLayout(filteredServices, layout, currentDisplay) {
+    const existingWindows = new Map();
+    for (const entry of tiledLayoutState.windows) {
+        existingWindows.set(entry.serviceKey, entry.windowId);
+    }
+
+    for (const entry of tiledLayoutState.windows) {
+        if (!filteredServices.includes(entry.serviceKey)) {
+            try { await chrome.windows.remove(entry.windowId); } catch (e) { /* ignore */ }
+        }
+    }
+
+    const newWindows = [];
+    const newWindowIds = new Set();
+
+    for (const serviceKey of filteredServices) {
+        let windowId = existingWindows.get(serviceKey);
+        if (windowId) {
+            try {
+                await chrome.windows.get(windowId);
+            } catch (e) {
+                windowId = null;
+            }
+        }
+
+        if (!windowId) {
+            const newWindow = await chrome.windows.create({ url: getServiceUrl(serviceKey) });
+            windowId = newWindow?.id;
+        }
+
+        if (windowId) {
+            newWindows.push({ windowId, serviceKey });
+            newWindowIds.add(windowId);
+        }
+    }
+
+    tiledWindowIds = newWindowIds;
+    tiledLayoutState = {
+        layout,
+        services: [...filteredServices],
+        displayId: currentDisplay.id,
+        windows: newWindows
+    };
+
+    if (layout === 'bottom') {
+        await applyBottomLayout(currentDisplay.workArea);
+    } else if (layout === 'vertical') {
+        await applyVerticalLayout(currentDisplay.workArea);
+    }
+}
+
 async function tileWindowsVertical(servicesToTile) {
     // Get the currently focused window to determine which screen to use
     const lastFocusedWindow = await chrome.windows.getLastFocused({ windowTypes: ['normal'] });
@@ -1370,28 +1441,17 @@ async function tileWindowsVertical(servicesToTile) {
         const currentDisplay = lastFocusedWindow ? getDisplayForWindow(lastFocusedWindow, displays) : displays[0];
         const display = currentDisplay.workArea;
 
+        const filteredServices = filterTilingServices(servicesToTile);
+        if (tiledLayoutState.layout === 'vertical' && tiledLayoutState.windows.length > 0) {
+            await retileExistingLayout(filteredServices, 'vertical', currentDisplay);
+            return;
+        }
+
         // Close existing tiled windows first
         for (const windowId of tiledWindowIds) {
             try { await chrome.windows.remove(windowId); } catch (e) { /*ignore*/ }
         }
         tiledWindowIds.clear();
-
-        // Filter out invalid services - only keep services defined in SERVICES config
-        const filteredServices = servicesToTile.filter(service => {
-            const isValid = typeof service === 'string' &&
-                service.length > 0 &&
-                service.length < 50 &&
-                SERVICES.hasOwnProperty(service);
-            if (!isValid) {
-                console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
-            }
-            return isValid;
-        });
-
-        if (filteredServices.length === 0) {
-            console.warn('[AIMultiChat] No valid services to tile, using defaults');
-            filteredServices.push('chatgpt', 'claude', 'gemini');
-        }
 
         const displayId = currentDisplay.id;
         const screenWidth = display.width, screenHeight = display.height;
@@ -1431,29 +1491,18 @@ async function tileWindowsBottom(servicesToTile) {
         const currentDisplay = lastFocusedWindow ? getDisplayForWindow(lastFocusedWindow, displays) : displays[0];
         const display = currentDisplay.workArea;
 
+        const filteredServices = filterTilingServices(servicesToTile);
+        if (tiledLayoutState.layout === 'bottom' && tiledLayoutState.windows.length > 0) {
+            await retileExistingLayout(filteredServices, 'bottom', currentDisplay);
+            return;
+        }
+
         // Close existing tiled windows first
         for (const windowId of tiledWindowIds) {
             try { await chrome.windows.remove(windowId); } catch (e) { /*ignore*/ }
         }
         tiledWindowIds.clear();
         if (popupWindowId) { try { await chrome.windows.remove(popupWindowId); } catch (e) { /*ignore*/ } popupWindowId = null; }
-
-        // Filter out invalid services - only keep services defined in SERVICES config
-        const filteredServices = servicesToTile.filter(service => {
-            const isValid = typeof service === 'string' &&
-                service.length > 0 &&
-                service.length < 50 &&
-                SERVICES.hasOwnProperty(service);
-            if (!isValid) {
-                console.warn(`[AIMultiChat] Filtering out invalid service: ${service}`);
-            }
-            return isValid;
-        });
-
-        if (filteredServices.length === 0) {
-            console.warn('[AIMultiChat] No valid services to tile, using defaults');
-            filteredServices.push('chatgpt', 'claude', 'gemini');
-        }
 
         const bottomPopupHeight = BOTTOM_POPUP_HEIGHT;
         const displayId = currentDisplay.id;

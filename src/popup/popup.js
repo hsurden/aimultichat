@@ -665,8 +665,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     const prefs = await chrome.storage.local.get([
       'checkedServices',
       'tilingPreference',
-      'statusOpen',
-      'currentPromptText'
+      'statusOpen'
     ]);
 
     // restore services
@@ -683,7 +682,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     // restore other prefs
     prefs.tilingPreference && (tilingOptions.value = prefs.tilingPreference);
     prefs.statusOpen       && (statusDetails.open    = true);
-    prefs.currentPromptText && (promptEl.value        = prefs.currentPromptText);
+    if (promptEl) {
+      promptEl.value = '';
+      chrome.storage.local.remove('currentPromptText');
+    }
 
     // bottom‐mode?
     if (new URLSearchParams(window.location.search).get('layout') === 'bottom') {
