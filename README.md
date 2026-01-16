@@ -2,7 +2,7 @@
 
 > Send one prompt, get answers from multiple AI services simultaneously
 
-Stop copy-pasting the same prompt across ChatGPT, Claude, Gemini, and other AI services. AI Multi-Broadcast is a browser extension that broadcasts your prompts to multiple AI services at once, letting you compare responses side-by-side instantly.
+AI Multi-Broadcast is a Chrome browser extension that broadcasts your prompts to multiple AI services at once, letting you compare responses side-by-side instantly.
 
 ## ✨ Features
 
